@@ -43,11 +43,21 @@ class DesktopWindow:
         hwnd: 窗口句柄 / Window handle
         class_name: 窗口类名 / Window class name
         window_name: 窗口标题 / Window title
+        window_id: 窗口ID (macOS) / Window ID (macOS)
+        title: 窗口标题 (UTF-8, macOS) / Window title (UTF-8, macOS)
+        pid: 进程ID (macOS) / Process ID (macOS)
+        bundle_id: Bundle ID (macOS) / Bundle ID (macOS)
+        application_name: 应用程序名称 (macOS) / Application name (macOS)
     """
 
     hwnd: ctypes.c_void_p
     class_name: str
     window_name: str
+    window_id: int
+    title: str
+    pid: int
+    bundle_id: str
+    application_name: str
 
 
 class Toolkit:
@@ -166,8 +176,25 @@ class Toolkit:
                 .MaaToolkitDesktopWindowGetWindowName(window_handle)
                 .decode()
             )
+            window_id = Library.toolkit().MaaToolkitDesktopWindowGetWindowId(window_handle)
+            title = (
+                Library.toolkit()
+                .MaaToolkitDesktopWindowGetTitle(window_handle)
+                .decode()
+            )
+            pid = Library.toolkit().MaaToolkitDesktopWindowGetPid(window_handle)
+            bundle_id = (
+                Library.toolkit()
+                .MaaToolkitDesktopWindowGetBundleId(window_handle)
+                .decode()
+            )
+            application_name = (
+                Library.toolkit()
+                .MaaToolkitDesktopWindowGetApplicationName(window_handle)
+                .decode()
+            )
 
-            windows.append(DesktopWindow(hwnd, class_name, window_name))
+            windows.append(DesktopWindow(hwnd, class_name, window_name, window_id, title, pid, bundle_id, application_name))
 
         Library.toolkit().MaaToolkitDesktopWindowListDestroy(list_handle)
         return windows
@@ -292,5 +319,30 @@ class Toolkit:
 
         Library.toolkit().MaaToolkitDesktopWindowGetWindowName.restype = ctypes.c_char_p
         Library.toolkit().MaaToolkitDesktopWindowGetWindowName.argtypes = [
+            MaaToolkitDesktopWindowHandle
+        ]
+
+        Library.toolkit().MaaToolkitDesktopWindowGetWindowId.restype = ctypes.c_uint32
+        Library.toolkit().MaaToolkitDesktopWindowGetWindowId.argtypes = [
+            MaaToolkitDesktopWindowHandle
+        ]
+
+        Library.toolkit().MaaToolkitDesktopWindowGetTitle.restype = ctypes.c_char_p
+        Library.toolkit().MaaToolkitDesktopWindowGetTitle.argtypes = [
+            MaaToolkitDesktopWindowHandle
+        ]
+
+        Library.toolkit().MaaToolkitDesktopWindowGetPid.restype = ctypes.c_int32
+        Library.toolkit().MaaToolkitDesktopWindowGetPid.argtypes = [
+            MaaToolkitDesktopWindowHandle
+        ]
+
+        Library.toolkit().MaaToolkitDesktopWindowGetBundleId.restype = ctypes.c_char_p
+        Library.toolkit().MaaToolkitDesktopWindowGetBundleId.argtypes = [
+            MaaToolkitDesktopWindowHandle
+        ]
+
+        Library.toolkit().MaaToolkitDesktopWindowGetApplicationName.restype = ctypes.c_char_p
+        Library.toolkit().MaaToolkitDesktopWindowGetApplicationName.argtypes = [
             MaaToolkitDesktopWindowHandle
         ]

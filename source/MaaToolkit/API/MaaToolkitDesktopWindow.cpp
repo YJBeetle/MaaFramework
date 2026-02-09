@@ -99,3 +99,53 @@ const char* MaaToolkitDesktopWindowGetWindowName(const MaaToolkitDesktopWindow* 
 
     return window->window_name().c_str();
 }
+
+uint32_t MaaToolkitDesktopWindowGetWindowId(const MaaToolkitDesktopWindow* window)
+{
+    if (!window) {
+        LogError << "window is null";
+        return 0;
+    }
+
+    return window->window_id();
+}
+
+const char* MaaToolkitDesktopWindowGetTitle(const MaaToolkitDesktopWindow* window)
+{
+    if (!window) {
+        LogError << "window is null";
+        return "";
+    }
+
+    return window->title().c_str();
+}
+
+int32_t MaaToolkitDesktopWindowGetPid(const MaaToolkitDesktopWindow* window)
+{
+    if (!window) {
+        LogError << "window is null";
+        return 0;
+    }
+
+    return window->pid();
+}
+
+const char* MaaToolkitDesktopWindowGetBundleId(const MaaToolkitDesktopWindow* window)
+{
+    if (!window) {
+        LogError << "window is null";
+        return "";
+    }
+
+    return window->bundle_id().c_str();
+}
+
+const char* MaaToolkitDesktopWindowGetApplicationName(const MaaToolkitDesktopWindow* window)
+{
+    if (!window) {
+        LogError << "window is null";
+        return "";
+    }
+
+    return window->application_name().c_str();
+}

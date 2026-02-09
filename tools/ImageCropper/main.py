@@ -75,8 +75,9 @@ def parse_args() -> Controller:
 
     t = int(input("1 | AdbController\n"
                   "2 | Win32Controller\n"
+                  "3 | MacOSController\n"
                   "Please select the controller type (ENTER to pass): "))
-    if not 1 <= t <= 2:
+    if not 1 <= t <= 3:
         return None
     print("MaaToolkit search in progress...")
 
@@ -104,6 +105,19 @@ def parse_args() -> Controller:
             device_serial = window_list[i].window_name
             return Win32Controller(hWnd=window_list[i].hwnd,
                                    screencap_method=win32_screencap_method)
+    elif t == 3:
+        window_list = Toolkit.find_desktop_windows()
+        if len(window_list):
+            max_len = 40
+            for i, w in enumerate(window_list):
+                c = w.class_name[:max_len - 3] + '...' if len(w.class_name) > max_len else w.class_name
+                print(f"{w.window_id:>19} {c:>{max_len}} | {i:>3} | {w.window_name}")
+            print(str.format("{:->19} {:->{}} | {:->3} | {}", " window_id", " class name", max_len, "num", "window name"))
+        i = int(input("Please select the window (ENTER to pass): "))
+        if 0 <= i < len(window_list):
+            device_serial = window_list[i].window_name
+            # TODO MacOSController
+            return None 
     return None
 
 

@@ -6,8 +6,8 @@ import colormatcher
 from datetime import datetime
 from roimage import Roimage
 
-from maa.define import MaaAdbScreencapMethodEnum, MaaWin32ScreencapMethodEnum
-from maa.controller import AdbController, Win32Controller, Controller
+from maa.define import MaaAdbScreencapMethodEnum, MaaWin32ScreencapMethodEnum, MaaMacOSScreencapMethodEnum, MaaMacOSInputMethodEnum
+from maa.controller import AdbController, Win32Controller, MacOSController, Controller
 from maa.toolkit import Toolkit
 
 # 初始化设备参数
@@ -15,6 +15,7 @@ from maa.toolkit import Toolkit
 device_serial = None
 adb_screencap_method = MaaAdbScreencapMethodEnum.Default
 win32_screencap_method = MaaWin32ScreencapMethodEnum.DXGI_DesktopDup
+macos_screencap_method = MaaMacOSScreencapMethodEnum.ScreenCaptureKit
 
 # 初始窗口大小 (width, height)
 # window_size = (720, 1280) # 竖屏
@@ -118,8 +119,9 @@ def parse_args() -> Controller:
         i = int(input("Please select the window (ENTER to pass): "))
         if 0 <= i < len(window_list):
             device_serial = window_list[i].title  # 使用 title 作为设备标识
-            # TODO MacOSController
-            return None 
+            return MacOSController(window_id=window_list[i].window_id,
+                                   pid=window_list[i].pid,
+                                   screencap_method=macos_screencap_method)
     return None
 
 

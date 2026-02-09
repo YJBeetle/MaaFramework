@@ -110,12 +110,14 @@ def parse_args() -> Controller:
         if len(window_list):
             max_len = 40
             for i, w in enumerate(window_list):
-                c = w.class_name[:max_len - 3] + '...' if len(w.class_name) > max_len else w.class_name
-                print(f"{w.window_id:>19} {c:>{max_len}} | {i:>3} | {w.window_name}")
-            print(str.format("{:->19} {:->{}} | {:->3} | {}", " window_id", " class name", max_len, "num", "window name"))
+                # macOS 使用 application_name 作为主要显示名称
+                app_name = w.application_name[:max_len - 3] + '...' if len(w.application_name) > max_len else w.application_name
+                title = w.title[:20] + '...' if len(w.title) > 20 else w.title
+                print(f"{w.window_id:>10} {app_name:>{max_len}} | {i:>3} | {title}")
+            print(str.format("{:->10} {:->{}} | {:->3} | {}", " window_id", " application", max_len, "num", "title"))
         i = int(input("Please select the window (ENTER to pass): "))
         if 0 <= i < len(window_list):
-            device_serial = window_list[i].window_name
+            device_serial = window_list[i].title  # 使用 title 作为设备标识
             # TODO MacOSController
             return None 
     return None

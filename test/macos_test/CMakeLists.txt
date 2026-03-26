@@ -1,6 +1,10 @@
 add_executable(macos_test
+    MacOSTestMain.cpp
+)
+
+add_executable(macos_test_gui
     MacOSTestGUI.h MacOSTestGUI.mm
-    main.cpp
+    MacOSTestGUIMain.mm
 )
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/pipeline.json ${CMAKE_BINARY_DIR}/resources/macos_test/pipeline/pipeline.json COPYONLY)
@@ -15,10 +19,12 @@ add_custom_target(generate_bee_png DEPENDS ${CMAKE_BINARY_DIR}/resources/macos_t
 add_dependencies(macos_test generate_bee_png)
 
 target_compile_options(macos_test PRIVATE -Wno-error -Wno-unused-parameter -Wno-unused-variable)
+target_compile_options(macos_test_gui PRIVATE -Wno-error -Wno-unused-parameter -Wno-unused-variable)
 
 find_library(CORE_GRAPHICS CoreGraphics REQUIRED)
 find_library(APPLICATION_SERVICES ApplicationServices REQUIRED)
 find_library(FOUNDATION Foundation REQUIRED)
 find_library(APPKIT AppKit REQUIRED)
 find_library(CARBON Carbon REQUIRED)
-target_link_libraries(macos_test MaaFramework MaaToolkit ${CORE_GRAPHICS} ${APPLICATION_SERVICES} ${FOUNDATION} ${APPKIT} ${CARBON})
+target_link_libraries(macos_test MaaFramework MaaToolkit)
+target_link_libraries(macos_test_gui ${CORE_GRAPHICS} ${APPLICATION_SERVICES} ${FOUNDATION} ${APPKIT} ${CARBON})

@@ -1,11 +1,14 @@
 #include <chrono>
+#include <csignal>
 #include <iostream>
 #include <thread>
 
+#include <mach-o/dyld.h>
+#include <spawn.h>
+#include <sys/wait.h>
+
 #include "MaaFramework/MaaAPI.h"
 #include "MaaToolkit/MaaToolkitAPI.h"
-
-#include "./MacOSTestGUI.h"
 
 // 检查并请求必要权限
 void checkAndRequestPermissions()
@@ -52,13 +55,10 @@ void checkAndRequestPermissions()
 }
 
 // 运行 MaaFW 窗口测试
-void runMaaTest(const std::string& windowTitle)
+void runMaaTest(const std::string& windowTitle, const std::string& exe_dir)
 {
     // 初始化 MaaToolkit
     MaaToolkitConfigInitOption("./", "{}");
-
-    // 等待一下，让窗口完全显示
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     uint32_t windowID = 0;
 
@@ -103,7 +103,7 @@ void runMaaTest(const std::string& windowTitle)
 
     // 创建资源
     auto resource_handle = MaaResourceCreate();
-    std::string resource_dir = "./resources/macos_test";
+    std::string resource_dir = exe_dir + "../../resources/macos_test";
     auto res_id = MaaResourcePostBundle(resource_handle, resource_dir.c_str());
 
     MaaControllerWait(controller, ctrl_id);
@@ -135,19 +135,57 @@ void runMaaTest(const std::string& windowTitle)
     destroy();
 }
 
-void gui(const std::string& windowTitle)
+pid_t launchGUIProcess(const std::string& windowTitle, const std::string& exe_dir)
 {
-    MacOSTestGUI gui(windowTitle);
-    gui.run();
+    std::string gui_exe = exe_dir + "macos_test_gui";
+
+    pid_t pid = 0;
+    char* argv[] = { const_cast<char*>(gui_exe.c_str()), const_cast<char*>(windowTitle.c_str()), nullptr };
+    extern char** environ;
+    int ret = posix_spawn(&pid, gui_exe.c_str(), nullptr, nullptr, argv, environ);
+    if (ret != 0) {
+        std::cerr << "Failed to launch GUI process: " << strerror(ret) << std::endl;
+        return -1;
+    }
+
+    std::cout << "Launched GUI process (PID: " << pid << ")" << std::endl;
+    return pid;
 }
 
 int main()
 {
     checkAndRequestPermissions();
-    std::string randomTitle = "MaaTestWindow_" + std::to_string(rand() % 10000);
-    std::thread maatThread(runMaaTest, randomTitle);
-    gui(randomTitle);
 
-    maatThread.join();
+    uint32_t buf_size = 0;
+    _NSGetExecutablePath(nullptr, &buf_size);
+    std::string exe_path(buf_size, '\0');
+    _NSGetExecutablePath(exe_path.data(), &buf_size);
+    auto sep = std::string(exe_path.c_str()).rfind('/');
+    std::string exe_dir = (sep != std::string::npos ? std::string(exe_path.c_str()).substr(0, sep + 1) : "./");
+
+    std::string randomTitle = "MaaTestWindow_" + std::to_string(rand() % 10000);
+
+    // 启动 GUI 进程
+    pid_t gui_pid = launchGUIProcess(randomTitle, exe_dir);
+    if (gui_pid <= 0) {
+        std::cerr << "Failed to launch GUI process." << std::endl;
+        return -1;
+    }
+
+    // 等待GUI进程启动并创建窗口
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+    // 运行 MaaFW 测试
+    runMaaTest(randomTitle, exe_dir);
+
+    // 等待2S
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+    // 测试完成后终止 GUI 进程
+    kill(gui_pid, SIGTERM);
+    int status = 0;
+    waitpid(gui_pid, &status, 0);
+    std::cout << "GUI process terminated." << std::endl;
+
     return 0;
 }

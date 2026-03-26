@@ -108,6 +108,18 @@
 
 @end
 
+@interface TestAppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation TestAppDelegate
+
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender
+{
+    return YES;
+}
+
+@end
+
 MacOSTestGUI::MacOSTestGUI(const std::string& windowTitle)
 {
     // 获取当前键盘布局
@@ -123,6 +135,10 @@ MacOSTestGUI::MacOSTestGUI(const std::string& windowTitle)
 
     // 设置应用为普通前台应用，否则无法接收键盘事件
     [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+
+    // 设置 delegate，窗口关闭时退出程序
+    TestAppDelegate* appDelegate = [[TestAppDelegate alloc] init];
+    [app setDelegate:appDelegate];
 
     // 创建窗口
     NSRect frame = NSMakeRect(100, 100, 400, 400);

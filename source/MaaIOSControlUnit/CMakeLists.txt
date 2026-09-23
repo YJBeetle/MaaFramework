@@ -37,6 +37,11 @@ find_package(OpenSSL REQUIRED)
 target_include_directories(MaaIOSControlUnit
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${SCRCTL_SOURCE_DIR}/src ${MAA_PRIVATE_INC} ${MAA_PUBLIC_INC})
 
+# scrctl 的头必须排在依赖之前。它自己的 include 写成 "json/Json.h" 这种短路径，
+# 而 macOS 默认文件系统大小写不敏感——一旦搜索路径上有个第三方 json/json.h
+# （brew 的 jsoncpp 就是），scrctl 的头会被它顶掉，报出来的错看着像 scrctl 自己
+# 坏了。scrctl 侧已把该模块改名成 jsonlite 消掉这个坑，这里保留顺序作为第二道防线。
+
 target_link_libraries(MaaIOSControlUnit PRIVATE MaaUtils ${OpenCV_LIBS} OpenSSL::SSL OpenSSL::Crypto)
 
 # scrctl 的解码后端要这三个框架（照 scrctl 自己的 CMakeLists 来，不多链一个）。

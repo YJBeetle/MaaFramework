@@ -70,7 +70,7 @@ bool ScrctlSession::create(const std::string& udid, std::string& err)
         return false;
     }
 
-    LogInfo << "iOS session ready" << scrctl::mask(udid_)
+    LogInfo << "iOS session ready" << scrctl::remote::mask(udid_)
             << VAR(device_->property("ProductType")) << VAR(device_->property("OSVersion"))
             << VAR(first.width) << VAR(first.height);
     return true;

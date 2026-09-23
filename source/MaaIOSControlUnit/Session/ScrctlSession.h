@@ -7,9 +7,13 @@
 
 #include <opencv2/core/mat.hpp>
 
+namespace scrctl
+{
+struct Frame;
+}
+
 namespace scrctl::media
 {
-class Device;
 class FramePump;
 }
 

@@ -51,7 +51,7 @@ private:
     bool refresh_display_size(std::string& err);
 
     std::string udid_;
-    ScrctlSession session_;
+    maa::ios_unit::ScrctlSession session_;
 
     int display_width_ = 0;
     int display_height_ = 0;

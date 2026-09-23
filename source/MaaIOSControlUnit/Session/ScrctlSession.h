@@ -1,0 +1,84 @@
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include <opencv2/core/mat.hpp>
+
+namespace scrctl::media
+{
+class Device;
+class FramePump;
+}
+
+namespace scrctl::remote
+{
+class Device;
+}
+
+namespace scrctl::hid
+{
+class Service;
+class Buttons;
+}
+
+namespace maa::ios_unit
+{
+
+/// 一台设备的一次完整会话：CoreDevice 隧道 + 视频流取帧 + HID 注入通道。
+///
+/// 这是 scrctl 与 MaaFramework 之间唯一的边界：上面这层只讲"截图 / 点 / 滑 /
+/// 按键"，不讲 XPC、RTP 也不讲 HID 报告。
+///
+/// 截图走视频流而不是 screencaptureservice：实测取最新一帧中位 16.6ms，而截图
+/// RPC 是 226ms —— Maa 的整个循环是"截图 -> 识别 -> 动作"，这个差别决定任务能
+/// 跑多快。截图 RPC 留作兜底（流万一没帧可取）。
+class ScrctlSession {
+public:
+    ScrctlSession();
+    ~ScrctlSession();
+
+    ScrctlSession(const ScrctlSession&) = delete;
+    ScrctlSession& operator=(const ScrctlSession&) = delete;
+
+    /// 建立会话。udid 为空表示"恰好一台就用它"，多台时报错并列出候选。
+    ///
+    /// 成功后**媒体流一直在跑**：这不只是取帧的来源，也是触摸注入的认证门——
+    /// 没有媒体会话时设备把 HID 面标成未认证，backboardd 会把每个触摸事件丢掉，
+    /// 而这边没有任何错误可查。
+    bool create(const std::string& udid, std::string& err);
+
+    void close();
+
+    [[nodiscard]] bool connected() const { return device_ != nullptr; }
+
+    /// BGR 三通道图，已裁掉 HEVC 的 CTU 填充，尺寸就是逻辑显示尺寸。
+    bool screencap(cv::Mat& image, std::string& err);
+
+    /// 坐标是"整块屏幕的 0..1"。设备侧的触摸面本来就是归一化的，所以这条边界上
+    /// 传分数比传像素好——换机型不用改任何东西。
+    bool touch(double x, double y, bool down, std::string& err);
+    bool tap(double x, double y, int hold_ms, std::string& err);
+    bool stroke(const std::vector<std::pair<double, double>>& points, int step_ms, std::string& err);
+    bool press_button(uint16_t usage_code, std::string& err);
+
+    [[nodiscard]] const std::string& udid() const { return udid_; }
+    [[nodiscard]] std::string device_property(const char* key) const;
+
+private:
+    /// 把一帧 BGRA 变成裁好、转好色的 BGR。
+    static bool convert(const scrctl::Frame& frame, cv::Mat& image);
+
+    std::unique_ptr<scrctl::remote::Device> device_;
+    std::unique_ptr<scrctl::media::FramePump> pump_;
+    std::unique_ptr<scrctl::hid::Service> hid_;
+    std::unique_ptr<scrctl::hid::Buttons> buttons_;
+    std::string udid_;
+    /// 已经给出去的最新一帧的序号。screencap 要"比上次新的那一帧"，否则会连续
+    /// 几次拿到同一张图，识别层就会重复命中同一个状态。
+    uint64_t last_serial_ = 0;
+};
+
+} // namespace maa::ios_unit

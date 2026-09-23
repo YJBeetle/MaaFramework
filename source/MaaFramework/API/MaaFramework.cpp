@@ -97,6 +97,28 @@ MaaController* MaaMacOSControllerCreate(uint32_t window_id, MaaMacOSScreencapMet
 #endif
 }
 
+MaaController* MaaIOSControllerCreate(const char* udid)
+{
+    LogFunc << VAR(udid);
+
+#ifndef __APPLE__
+
+    LogError << "This API " << __FUNCTION__ << " is only available on macOS";
+    return nullptr;
+
+#else
+
+    auto control_unit = MAA_NS::IOSControlUnitLibraryHolder::create_control_unit(udid);
+
+    if (!control_unit) {
+        LogError << "Failed to create control unit";
+        return nullptr;
+    }
+
+    return new MAA_CTRL_NS::ControllerAgent(std::move(control_unit));
+#endif
+}
+
 MaaController* MaaAndroidNativeControllerCreate(const char* config_json)
 {
     LogFunc << VAR(config_json);

@@ -155,6 +155,7 @@ export using ::MaaCustomControllerCallbacks;
 export using ::MaaAdbControllerCreate;
 export using ::MaaWin32ControllerCreate;
 export using ::MaaMacOSControllerCreate;
+export using ::MaaIOSControllerCreate;
 export using ::MaaAndroidNativeControllerCreate;
 export using ::MaaCustomControllerCreate;
 export using ::MaaDbgControllerCreate;

@@ -114,6 +114,12 @@ public:
     virtual ~MacOSControlUnitAPI() = default;
 };
 
+class IOSControlUnitAPI : public ControlUnitAPI
+{
+public:
+    virtual ~IOSControlUnitAPI() = default;
+};
+
 class WlRootsControlUnitAPI
     : public ControlUnitAPI
     , public ScrollableUnit
@@ -173,6 +179,7 @@ using MaaControlUnitHandle = MAA_CTRL_UNIT_NS::ControlUnitAPI*;
 using MaaAdbControlUnitHandle = MAA_CTRL_UNIT_NS::AdbControlUnitAPI*;
 using MaaWin32ControlUnitHandle = MAA_CTRL_UNIT_NS::Win32ControlUnitAPI*;
 using MaaMacOSControlUnitHandle = MAA_CTRL_UNIT_NS::MacOSControlUnitAPI*;
+using MaaIOSControlUnitHandle = MAA_CTRL_UNIT_NS::IOSControlUnitAPI*;
 using MaaLinuxControlUnitHandle = MAA_CTRL_UNIT_NS::LinuxControlUnitAPI*;
 using MaaWlRootsControlUnitHandle = MAA_CTRL_UNIT_NS::LinuxControlUnitAPI*;
 using MaaKWinControlUnitHandle = MAA_CTRL_UNIT_NS::LinuxControlUnitAPI*;

@@ -53,6 +53,24 @@ extern "C"
         MaaMacOSControllerCreate(uint32_t window_id, MaaMacOSScreencapMethod screencap_method, MaaMacOSInputMethod input_method);
 
     /**
+     * @brief Create an iOS device controller backed by the CoreDevice/DDI developer services.
+     *
+     * @param udid The device UDID, or NULL to use the only connected device. When several
+     *             devices are attached, passing NULL fails rather than guessing.
+     * @return The controller handle, or nullptr on failure.
+     *
+     * @note Runs entirely in userspace over USB: no root, no jailbreak, no WebDriverAgent,
+     *       and unlike iPhone Mirroring the device stays usable while controlled.
+     * @note Requires the device to be paired (trusted) and to have a Developer Disk Image
+     *       mounted; Xcode mounts it automatically for registered devices.
+     * @note Screencap returns the logical display at native scale; touch coordinates are
+     *       in that same pixel space.
+     * @note Not supported: start_app, stop_app, input_text, key_down/key_up, scroll,
+     *       relative_move. `click_key` maps to hardware buttons only (home/lock/volume).
+     */
+    MAA_FRAMEWORK_API MaaController* MaaIOSControllerCreate(const char* udid);
+
+    /**
      * @brief Create an Android native controller backed by MaaAndroidNativeControlUnit.
      *
      * @param config_json JSON config for the control unit. Required fields:

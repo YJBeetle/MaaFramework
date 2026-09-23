@@ -189,6 +189,26 @@ bool ScrctlSession::stroke(const std::vector<std::pair<double, double>>& points,
     return hid_->stroke(points, step_ms, err);
 }
 
+bool ScrctlSession::type_text(const std::string& text, std::string& err)
+{
+    if (!hid_) {
+        err = "not connected";
+        return false;
+    }
+    const auto reports = scrctl::hid::text_reports(text);
+    if (reports.empty()) {
+        // 一个都翻不出来比"打了个空字符串"更该报错：调用方以为自己输入过了，
+        // 而识别层接下来看到的是没变过的界面。
+        err = "no inputable character in \"" + text + "\" (only US-layout ASCII is supported)";
+        LogError << err;
+        return false;
+    }
+    if (reports.size() < text.size() * 2) {
+        LogWarn << "some characters were skipped" << VAR(text.size()) << VAR(reports.size());
+    }
+    return hid_->type_text(text, 40, err);
+}
+
 bool ScrctlSession::press_button(uint16_t usage_code, std::string& err)
 {
     if (!device_) {

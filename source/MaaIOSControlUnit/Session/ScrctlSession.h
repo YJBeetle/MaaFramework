@@ -68,6 +68,13 @@ public:
     bool stroke(const std::vector<std::pair<double, double>>& points, int step_ms, std::string& err);
     bool press_button(uint16_t usage_code, std::string& err);
 
+    /// 往设备敲一段文本。前提是有文本框正获得焦点。
+    ///
+    /// 走的是设备自带的键盘面（_ServiceID 512），不需要宿主注册虚拟键盘——实测
+    /// 报告直接落进焦点框。只覆盖 US 布局上能按出来的 ASCII；认不出的字符会被
+    /// 跳过，所以中文要另想办法（剪贴板）。
+    bool type_text(const std::string& text, std::string& err);
+
     [[nodiscard]] const std::string& udid() const { return udid_; }
     [[nodiscard]] std::string device_property(const char* key) const;
 

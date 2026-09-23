@@ -254,11 +254,12 @@ bool IOSControlUnitMgr::click_key(int key)
 
 bool IOSControlUnitMgr::input_text(const std::string& text)
 {
-    (void)text;
-    // 文本输入要往 dtuhidd 注册一个虚拟键盘面（createService + HID 报告描述符），
-    // 那条路的入参还没在真机上验通。眼下可以用剪贴板粘贴代替。
-    LogWarn << "input_text not implemented on iOS controller yet" << VAR(text.size());
-    return false;
+    std::string err;
+    if (!session_.type_text(text, err)) {
+        LogError << "input_text failed" << VAR(err);
+        return false;
+    }
+    return true;
 }
 
 bool IOSControlUnitMgr::key_down(int key)

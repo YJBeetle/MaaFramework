@@ -92,6 +92,10 @@ public:
     /// 已经没了，比不动还糟。
     bool launch_app(const std::string& bundle_id, std::string& err);
 
+    /// 杀掉一个 App（SIGKILL 给它的所有进程）。App 本来没在跑时返回真——Android 那边
+    /// `am force-stop` 也是这个语义，调用方的意图（"它别在跑"）已经成立。
+    bool stop_app(const std::string& bundle_id, std::string& err);
+
 private:
     /// 把一帧 BGRA 变成裁好、转好色的 BGR。
     static bool convert(const scrctl::Frame& frame, cv::Mat& image);

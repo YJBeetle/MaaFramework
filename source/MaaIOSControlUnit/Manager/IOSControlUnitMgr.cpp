@@ -105,9 +105,12 @@ bool IOSControlUnitMgr::start_app(const std::string& intent)
 
 bool IOSControlUnitMgr::stop_app(const std::string& intent)
 {
-    (void)intent;
-    LogWarn << "stop_app not implemented on iOS controller yet";
-    return false;
+    std::string err;
+    if (!session_.stop_app(intent, err)) {
+        LogError << "stop_app failed" << VAR(intent) << VAR(err);
+        return false;
+    }
+    return true;
 }
 
 bool IOSControlUnitMgr::refresh_display_size(std::string& err)

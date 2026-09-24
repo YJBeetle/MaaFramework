@@ -272,4 +272,18 @@ bool ScrctlSession::launch_app(const std::string& bundle_id, std::string& err)
     return true;
 }
 
+bool ScrctlSession::stop_app(const std::string& bundle_id, std::string& err)
+{
+    if (!device_) {
+        err = "not connected";
+        return false;
+    }
+    if (!scrctl::remote::App::stop(*device_, bundle_id, err)) {
+        LogError << "sendsignaltoprocess failed" << VAR(bundle_id) << VAR(err);
+        return false;
+    }
+    LogInfo << "app stopped" << bundle_id;
+    return true;
+}
+
 } // namespace maa::ios_unit

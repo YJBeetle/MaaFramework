@@ -19,7 +19,17 @@ namespace
 {
 
 constexpr int kFrameWaitMs = 3000;
-constexpr int kFreshFrameWaitMs = 800;
+/// 第一段等帧预算。屏幕在动时一帧 16ms 就到，这个预算只在"流活着但画面静止到不发
+/// 帧了"的那段窗口里付（实测是拆流前那约 7 秒）。取 300ms 还有一个作用：wake() 催
+/// 出去之后，泵最多 50ms 就会把"要不要救流"定下来，而那条问设备的 RPC 要 100~300ms
+/// ——等满 300ms 再读 reviving()，读到"还在救"结果其实答案是"活着不用救"的概率就很小了。
+constexpr int kFirstFrameWaitMs = 300;
+/// 泵正在救流时再多给的时间。为什么要有第二段：**"等不到新帧"有两种完全不同的
+/// 原因**——救流还在路上（再等就有），或者屏幕本来就静止（再等多久都没有，而最新
+/// 一帧就是当前画面）。只看"有没有新帧"分不出这两种，用同一个超时必然一边太短一边
+/// 太长。重起到第一帧实测 189~249ms（8 次，scrctl/tools/wake_latency_probe --quiet
+/// 1500 与 4000 两档），但停+起那两条 RPC 偶尔慢到近一秒，所以这一段给到 3 秒。
+constexpr int kReviveWaitMs = 3000;
 
 } // namespace
 
@@ -45,6 +55,11 @@ bool ScrctlSession::create(const std::string& udid, std::string& err)
     udid_ = device_->udid();
 
     scrctl::media::FramePump::Options pump_options;
+    // 关掉"静默满 3 秒就自己去重起"。那是给窗口镜像用的（有人盯着，画面必须自己
+    // 回来）；自动化是拉模型，没人截图的时候根本不需要帧。留着它的后果是：只要会话
+    // 开着，就会按"设备 6.9 秒拆流 -> 泵 3 秒后重起"的节拍每约 10 秒对设备做一次
+    // 停+起，手机白烧电与带宽，而我们一帧都不看。改由 screencap 里的 wake() 按需催。
+    pump_options.silence_restart_ms = 0;
     pump_ = scrctl::media::FramePump::start(*device_, pump_options, err);
     if (!pump_) {
         LogError << "start media stream failed" << VAR(err);
@@ -84,7 +99,6 @@ void ScrctlSession::close()
     pump_.reset();
     device_.reset();
     udid_.clear();
-    last_serial_ = 0;
 }
 
 bool ScrctlSession::convert(const scrctl::Frame& frame, cv::Mat& image)
@@ -119,16 +133,29 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
         return false;
     }
 
+    // 先记下"此刻泵手里最新的一帧是第几帧"，再催流。顺序不能反，而且这个起点必须是
+    // "现在最新的那一帧"而不是"我上次取走的那一帧"：设备会在画面静止一会儿之后把整条
+    // 会话结束掉（实测最后一个视频包之后约 6.9 秒），而会话死了之后设备上任何画面变化
+    // 都不会再推过来——于是泵手里那张"最新"的帧其实是拆流前那一刻的旧画面。拿"我上次
+    // 看过的"当起点，这张旧帧只要比它新就会被当成新帧交出去（实测：截图耗时 3ms，内容
+    // 与动作前逐像素一致），对自动化来说这是最坏的一种错，因为它返回真、看着是成功的。
+    const uint64_t floor_serial = pump_->serial();
+    // 心跳还在时 wake() 是空操作，所以每次截图都催得起。去掉这一句的话，"静置 20 秒
+    // -> swipe -> 截图"实测会一直交出拆流前那张旧图。
+    pump_->wake();
+
     scrctl::Frame frame;
-    if (uint64_t serial = pump_->newer(frame, last_serial_, kFreshFrameWaitMs)) {
-        last_serial_ = serial;
-        if (convert(frame, image)) {
-            return true;
-        }
+    uint64_t serial = pump_->newer(frame, floor_serial, kFirstFrameWaitMs);
+    if (serial == 0 && pump_->reviving()) {
+        // 泵正在救这条流：这一帧一定会来，多等一会儿，而不是把旧的那张交出去
+        serial = pump_->newer(frame, floor_serial, kReviveWaitMs);
+    }
+    if (serial != 0 && convert(frame, image)) {
+        return true;
     }
 
-    // 等不到新帧有两种情况：屏幕本来就静止（正常），或流卡住了（要兜底）。
-    // 分不清就都走同一条路：先拿"最新一帧"，再不行才退回截图 RPC。
+    // 没在救流又等不到新帧：流活着而画面本来就静止——"最新一帧"就是当前画面，
+    // 交出去是对的。再拿不到才退回截图 RPC。
     if (pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
         return true;
     }

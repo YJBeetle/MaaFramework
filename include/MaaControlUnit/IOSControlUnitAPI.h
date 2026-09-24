@@ -23,8 +23,11 @@ extern "C"
      *       (Xcode does this automatically when a device is registered).
      * @note Coordinates are in screenshot pixel space; the unit normalizes them
      *       to the device's 0..1 touch surface internally.
-     * @note Not supported: start_app, stop_app, input_text, key_down/key_up,
-     *       relative_move. `click_key` only maps to hardware buttons.
+     * @note Not supported: start_app, stop_app, key_down/key_up, relative_move.
+     *       `click_key` only maps to hardware buttons (home, volume, lock...).
+     * @note input_text covers ASCII reachable on the US layout; it returns false
+     *       when nothing in the string can be typed rather than silently sending
+     *       an empty keystroke sequence.
      */
     MAA_CONTROL_UNIT_API MaaIOSControlUnitHandle MaaIOSControlUnitCreate(const char* udid);
 

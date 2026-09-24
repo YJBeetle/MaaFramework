@@ -49,9 +49,14 @@ public:
 
     /// 建立会话。udid 为空表示"恰好一台就用它"，多台时报错并列出候选。
     ///
-    /// 成功后**媒体流一直在跑**：这不只是取帧的来源，也是触摸注入的认证门——
-    /// 没有媒体会话时设备把 HID 面标成未认证，backboardd 会把每个触摸事件丢掉，
-    /// 而这边没有任何错误可查。
+    /// 成功后**媒体流一直在跑**，它是"看现在屏幕上是什么"的唯一快路径：取最新一帧
+    /// 中位 16.6ms，而截图 RPC 要 226ms。
+    ///
+    /// 它**不是**触摸注入的前提。早先 scrctl 里记着"没有流在跑时设备把 HID 面标成
+    /// 未认证、backboardd 会静默丢掉每个触摸事件"，2026-09-25 用
+    /// scrctl/tools/hid_gate_probe 复测推翻了：设备自己结束空闲会话之后、我们主动
+    /// 拆掉会话之后、甚至全新进程一次流都没起过，注入实测都照样落地。所以下面几个
+    /// 输入方法都不催流（见 scrctl/docs/coredevice.md §11）。
     bool create(const std::string& udid, std::string& err);
 
     void close();
@@ -87,9 +92,6 @@ private:
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     std::string udid_;
-    /// 已经给出去的最新一帧的序号。screencap 要"比上次新的那一帧"，否则会连续
-    /// 几次拿到同一张图，识别层就会重复命中同一个状态。
-    uint64_t last_serial_ = 0;
 };
 
 } // namespace maa::ios_unit

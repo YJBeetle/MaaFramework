@@ -27,6 +27,22 @@ file(GLOB_RECURSE maa_ios_control_unit_header ${MAA_PUBLIC_INC}/MaaControlUnit/I
 file(GLOB_RECURSE scrctl_core_src ${SCRCTL_SOURCE_DIR}/src/*.cpp ${SCRCTL_SOURCE_DIR}/src/*.h)
 list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/app/.*")
 
+# 解码后端按平台挑，挑完只能有一个 create_platform_decoder() 的定义：
+# 非 Apple 用 PlatformDecoderFallback.cpp，Apple 用 VideoToolboxDecoder.cpp。
+# 两个都在就是 duplicate symbol。
+if(APPLE)
+    list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/PlatformDecoderFallback.cpp")
+else()
+    list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/VideoToolboxDecoder.cpp")
+endif()
+
+# 软解后端（libavcodec）**故意不编进来**：这个 dylib 要能被 dlopen 就走，多一个
+# 用户得自己装的动态依赖只会把部署搞复杂，而 scrctl 那边也还没有稳定 ABI。
+# 代价要写清楚——没有软解时，关键帧超过 65535 字节的码流（真机主屏实测有）在
+# VideoToolbox 上解不了，MaaFramework 侧的截图会一直拿不到画面。要补的话就在这里
+# 用 pkg-config 找 libavcodec 并把它链上。
+list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/FFmpegDecoder.cpp")
+
 add_library(MaaIOSControlUnit SHARED
     ${maa_ios_control_unit_src}
     ${maa_ios_control_unit_header}

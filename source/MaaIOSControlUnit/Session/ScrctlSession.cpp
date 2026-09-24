@@ -9,6 +9,7 @@
 
 #include "hid/Hid.h"
 #include "media/FramePump.h"
+#include "remote/App.h"
 #include "remote/Device.h"
 #include "xpc/XpcValue.h"
 
@@ -255,6 +256,20 @@ bool ScrctlSession::press_button(uint16_t usage_code, std::string& err)
 std::string ScrctlSession::device_property(const char* key) const
 {
     return device_ ? device_->property(key) : std::string();
+}
+
+bool ScrctlSession::launch_app(const std::string& bundle_id, std::string& err)
+{
+    if (!device_) {
+        err = "not connected";
+        return false;
+    }
+    if (!scrctl::remote::App::launch(*device_, bundle_id, err, /*terminate_existing = */ false)) {
+        LogError << "launchapplication failed" << VAR(bundle_id) << VAR(err);
+        return false;
+    }
+    LogInfo << "app launched" << bundle_id;
+    return true;
 }
 
 } // namespace maa::ios_unit

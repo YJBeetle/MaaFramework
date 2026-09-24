@@ -92,12 +92,15 @@ MaaControllerFeature IOSControlUnitMgr::get_features() const
 
 bool IOSControlUnitMgr::start_app(const std::string& intent)
 {
-    (void)intent;
-    // 设备目录里有 com.apple.coredevice.appservice 的 launchapplication feature，
-    // 所以这条路是通的，只是还没实现：入参形状没在真机上验过，
-    // 而验证要真的把前台应用切走，得等允许动别的 App 的时候再做。
-    LogWarn << "start_app not implemented on iOS controller yet";
-    return false;
+    // intent 在这里就是 bundle id（com.apple.mobilesafari 这种），和 Android 那边
+    // 传包名是同一个位置。语义也对齐：Android 用 `monkey -p <pkg> 1` 唤起，不动
+    // 已经在跑的实例，所以这边 terminateExisting 传 false。
+    std::string err;
+    if (!session_.launch_app(intent, err)) {
+        LogError << "start_app failed" << VAR(intent) << VAR(err);
+        return false;
+    }
+    return true;
 }
 
 bool IOSControlUnitMgr::stop_app(const std::string& intent)

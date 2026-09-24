@@ -83,6 +83,15 @@ public:
     [[nodiscard]] const std::string& udid() const { return udid_; }
     [[nodiscard]] std::string device_property(const char* key) const;
 
+    /// 把一个 App 带到前台。**不动已经在跑的实例**——Android 那边 start_app 是
+    /// `monkey -p <pkg> 1`，语义就是"唤起/恢复"，不是冷启动。
+    ///
+    /// 别改成 terminateExisting=true：实测那样会先把实例杀掉，而杀掉之后设备有概率
+    /// 回 "The process identifier of the launched application could not be determined"
+    /// （code 10004）——**这句失败是"已经杀了、没起来"**，调用方拿到 false 时前台 App
+    /// 已经没了，比不动还糟。
+    bool launch_app(const std::string& bundle_id, std::string& err);
+
 private:
     /// 把一帧 BGRA 变成裁好、转好色的 BGR。
     static bool convert(const scrctl::Frame& frame, cv::Mat& image);

@@ -23,8 +23,11 @@ extern "C"
      *       (Xcode does this automatically when a device is registered).
      * @note Coordinates are in screenshot pixel space; the unit normalizes them
      *       to the device's 0..1 touch surface internally.
-     * @note Not supported: start_app, stop_app, key_down/key_up, relative_move.
+     * @note Not supported: stop_app, key_down/key_up, relative_move.
      *       `click_key` only maps to hardware buttons (home, volume, lock...).
+     * @note start_app takes a bundle identifier and brings that app to the
+     *       foreground without disturbing a running instance -- same semantics
+     *       as the Android unit, which uses `monkey -p <pkg> 1`.
      * @note input_text covers ASCII reachable on the US layout; it returns false
      *       when nothing in the string can be typed rather than silently sending
      *       an empty keystroke sequence.

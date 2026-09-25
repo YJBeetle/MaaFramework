@@ -70,10 +70,14 @@ bool ScrctlSession::create(const std::string& udid, std::string& err)
 
     scrctl::Frame first;
     if (!pump_->latest(first, kFrameWaitMs)) {
-        err = "no frame decoded within " + std::to_string(kFrameWaitMs) + "ms";
-        LogError << err;
-        close();
-        return false;
+        // 拿不到第一帧**不算连接失败**。以前这里直接 return false，于是"画面复杂到
+        // VideoToolbox 吃不下这一帧"（实测无边记画满白线的看板，IDR 256278 字节，超过
+        // 2 字节长度前缀上限）会让整个控制单元连不上——而它其实每次截图都能拿到正确的图。
+        // 三件事各自独立：输入通路不需要这条流（实测流死了触摸照样落地）；取图还有截图
+        // 服务这条路（screencap 里的 video_unusable 快路径）；泵自己会退避重试并在解出
+        // 帧时自动回到视频路。所以这里最坏的判断也只是"暂时只能用截图服务"。
+        LogWarn << "no frame decoded within" << VAR(kFrameWaitMs)
+                << ", will use screencapture service until the video path works";
     }
 
     // 面的认证状态是流起来之后才翻的，立刻发报告会被丢掉。
@@ -134,6 +138,13 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
         return false;
     }
 
+    if (pump_->video_unusable()) {
+        // 视频这条路已经确认走不通（单帧大到当前解码后端吃不下，见 FramePump::video_unusable）。
+        // 那就别再把预算花在等帧上：直接问截图服务。泵在后台偶尔还会重试，哪天真解出
+        // 一帧这个判断就自己消失，不需要这里做恢复逻辑。
+        return screencap_via_service(image, err);
+    }
+
     // 先记下"此刻泵手里最新的一帧是第几帧"，再催流。顺序不能反，而且这个起点必须是
     // "现在最新的那一帧"而不是"我上次取走的那一帧"：设备会在画面静止一会儿之后把整条
     // 会话结束掉（实测最后一个视频包之后约 6.9 秒），而会话死了之后设备上任何画面变化
@@ -157,11 +168,21 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
 
     // 没在救流又等不到新帧：流活着而画面本来就静止——"最新一帧"就是当前画面，
     // 交出去是对的。再拿不到才退回截图 RPC。
-    if (pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
+    //
+    // 但泵**一个帧都没解出来过**时（serial()==0）这一步没有意义：不是"画面静止所以
+    // 没有新帧"，而是这条流根本还没产出过任何东西，再等 3 秒也是零。省掉它能把降级
+    // 头两轮的单次截图从 ~6.9 秒压到 ~3.9 秒（实测：无边记那块解不了的画板上头两次
+    // 截图各 6849/6894ms，之后泵自己判死、走快路径，稳定在 540-990ms）。
+    if (pump_->serial() != 0 && pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
         return true;
     }
 
     LogWarn << "frame pump gave nothing, falling back to screencapture service";
+    return screencap_via_service(image, err);
+}
+
+bool ScrctlSession::screencap_via_service(cv::Mat& image, std::string& err)
+{
     auto input = scrctl::xpc::make_dict();
     scrctl::xpc::dict_set(input, "displayUniqueID", scrctl::xpc::make_null());
     scrctl::xpc::dict_set(input, "requestedFormat", scrctl::xpc::make_string("png"));

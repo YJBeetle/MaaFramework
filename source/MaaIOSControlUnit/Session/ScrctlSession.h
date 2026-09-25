@@ -100,6 +100,11 @@ private:
     /// 把一帧 BGRA 变成裁好、转好色的 BGR。
     static bool convert(const scrctl::Frame& frame, cv::Mat& image);
 
+    /// 不经过视频流问一次截图服务（`capturescreenshot`）。它自己走 CoreDevice 的 RPC
+    /// 通道，所以视频流死了、甚至这条流根本解不了的时候它照样能拿到当前画面——代价是
+    /// 一次 RPC 加一张 PNG 解码，比从泵里取一帧慢一个数量级。
+    bool screencap_via_service(cv::Mat& image, std::string& err);
+
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
     std::unique_ptr<scrctl::hid::Service> hid_;

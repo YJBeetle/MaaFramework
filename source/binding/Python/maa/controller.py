@@ -971,6 +971,39 @@ class MacOSController(Controller):
         ]
 
 
+class IOSController(Controller):
+    """iOS 控制器 / iOS controller
+
+    通过 USB（或局域网）直接控制真机：截图、点击、滑动、文本输入、启停 App。
+    Controls a physical iOS device over USB/LAN: screencap, click, swipe, text, app start/stop.
+    """
+
+    def __init__(self, udid: str = ""):
+        """创建 iOS 控制器 / Create iOS controller
+
+        Args:
+            udid: 设备 UDID，传空串表示使用第一台在连的设备 / device UDID, empty for the first connected device
+
+        Raises:
+            RuntimeError: 如果创建失败
+        """
+        super().__init__()
+        self._set_ios_api_properties()
+
+        self._handle = Library.framework().MaaIOSControllerCreate(
+            udid.encode(),
+        )
+
+        if not self._handle:
+            raise RuntimeError("Failed to create iOS controller.")
+
+    def _set_ios_api_properties(self):
+        Library.framework().MaaIOSControllerCreate.restype = MaaControllerHandle
+        Library.framework().MaaIOSControllerCreate.argtypes = [
+            ctypes.c_char_p,
+        ]
+
+
 class AndroidNativeController(Controller):
     """Android Native 控制器 / Android native controller
 

@@ -464,6 +464,31 @@ typedef uint64_t MaaMacOSInputMethod;
 #define MaaMacOSInputMethod_GlobalEvent 1ULL
 #define MaaMacOSInputMethod_PostToPid (1ULL << 1)
 
+// MaaIOScreencapMethod:
+/**
+ * @brief iOS screencap method flags
+ *
+ * Use bitwise OR to set the methods you need.
+ * MaaFramework will use the fastest method that is actually working and fall back
+ * to the slower ones when it is not.
+ *
+ * Default: All methods
+ *
+ * Note: Stream carries HEVC, so it is lossy; pick ScreenshotService only when
+ * pixel-exact matching matters more than per-frame latency.
+ *
+ * | Method            | Speed     | Compatibility | Encoding | Notes                                                  |
+ * |-------------------|-----------|---------------|----------|--------------------------------------------------------|
+ * | Stream            | Very Fast | Medium        | Lossy    | live media stream; the device ends idle sessions on its own |
+ * | ScreenshotService | Medium    | High          | Lossless | one-shot capturescreenshot RPC, ~10x Stream per frame  |
+ */
+typedef uint64_t MaaIOScreencapMethod;
+#define MaaIOScreencapMethod_None 0ULL
+#define MaaIOScreencapMethod_Stream (1ULL)
+#define MaaIOScreencapMethod_ScreenshotService (1ULL << 1)
+#define MaaIOScreencapMethod_All (~MaaIOScreencapMethod_None)
+#define MaaIOScreencapMethod_Default MaaIOScreencapMethod_All
+
 // MaaLinuxScreencapMethod:
 /**
  * @brief Linux Screencap method

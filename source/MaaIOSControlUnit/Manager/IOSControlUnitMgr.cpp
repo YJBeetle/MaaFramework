@@ -41,8 +41,9 @@ uint16_t consumer_usage_for(int keycode)
 
 } // namespace
 
-IOSControlUnitMgr::IOSControlUnitMgr(std::string udid)
-    : udid_(std::move(udid))
+IOSControlUnitMgr::IOSControlUnitMgr(std::string udid, MaaIOScreencapMethod screencap_methods)
+    : udid_(std::move(udid)),
+      screencap_methods_(screencap_methods)
 {
 }
 
@@ -54,7 +55,7 @@ IOSControlUnitMgr::~IOSControlUnitMgr()
 bool IOSControlUnitMgr::connect()
 {
     std::string err;
-    if (!session_.create(udid_, err)) {
+    if (!session_.create(udid_, screencap_methods_, err)) {
         LogError << "Failed to create iOS session" << VAR(err);
         return false;
     }

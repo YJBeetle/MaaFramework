@@ -17,6 +17,10 @@ extern "C"
      * @brief Create an iOS device control unit talking over the CoreDevice/DDI stack.
      *
      * @param udid The device UDID to connect, or NULL/"" to use the only connected device.
+     * @param screencap_methods Bitmask of allowed screencap methods. With only
+     *       MaaIOScreencapMethod_ScreenshotService set, no media stream is ever started
+     *       (nothing decodes in the background); with only _Stream set there is no
+     *       fallback, so a screen the decoder cannot handle fails instead of degrading.
      * @return The control unit handle, or nullptr on failure.
      *
      * @note The device must be paired and have a Developer Disk Image mounted
@@ -34,7 +38,8 @@ extern "C"
      *       when nothing in the string can be typed rather than silently sending
      *       an empty keystroke sequence.
      */
-    MAA_CONTROL_UNIT_API MaaIOSControlUnitHandle MaaIOSControlUnitCreate(const char* udid);
+    MAA_CONTROL_UNIT_API MaaIOSControlUnitHandle
+        MaaIOSControlUnitCreate(const char* udid, MaaIOScreencapMethod screencap_methods);
 
     MAA_CONTROL_UNIT_API void MaaIOSControlUnitDestroy(MaaIOSControlUnitHandle handle);
 

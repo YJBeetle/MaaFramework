@@ -20,10 +20,12 @@ namespace
 {
 
 constexpr int kFrameWaitMs = 3000;
-/// 第一段等帧预算。屏幕在动时一帧 16ms 就到，这个预算只在"流活着但画面静止到不发
-/// 帧了"的那段窗口里付（实测是拆流前那约 7 秒）。取 300ms 还有一个作用：wake() 催
-/// 出去之后，泵最多 50ms 就会把"要不要救流"定下来，而那条问设备的 RPC 要 100~300ms
-/// ——等满 300ms 再读 reviving()，读到"还在救"结果其实答案是"活着不用救"的概率就很小了。
+/// 第一段等帧预算。屏幕在动时一帧 16ms 就到，这个预算只在"流活着但画面静止到不发帧
+/// 了"的那段窗口里付：静止画面上设备一个视频包都不发（只剩每秒那个 SR 心跳），一直
+/// 到起流后 20 秒的租期把它拆掉为止——屏幕要是起流后没多久就静止，这段能有约 13 秒长。
+/// 取 300ms 还有一个作用：wake() 催出去之后，泵最多 50ms 就会把"要不要救流"定下来，
+/// 而那条问设备的 RPC 要 100~300ms——等满 300ms 再读 reviving()，读到"还在救"结果
+/// 其实答案是"活着不用救"的概率就很小了。
 constexpr int kFirstFrameWaitMs = 300;
 /// 泵正在救流时再多给的时间。为什么要有第二段：**"等不到新帧"有两种完全不同的
 /// 原因**——救流还在路上（再等就有），或者屏幕本来就静止（再等多久都没有，而最新
@@ -41,11 +43,18 @@ ScrctlSession::~ScrctlSession()
     close();
 }
 
-bool ScrctlSession::create(const std::string& udid, std::string& err)
+bool ScrctlSession::create(const std::string& udid, MaaIOScreencapMethod screencap_methods, std::string& err)
 {
     if (device_) {
         return true;
     }
+
+    if (screencap_methods == MaaIOScreencapMethod_None) {
+        err = "no screencap method selected";
+        LogError << err;
+        return false;
+    }
+    screencap_methods_ = screencap_methods;
 
     auto device = scrctl::remote::Device::establish(udid, err);
     if (!device) {
@@ -55,35 +64,44 @@ bool ScrctlSession::create(const std::string& udid, std::string& err)
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*device));
     udid_ = device_->udid();
 
-    scrctl::media::FramePump::Options pump_options;
-    // 关掉"静默满 3 秒就自己去重起"。那是给窗口镜像用的（有人盯着，画面必须自己
-    // 回来）；自动化是拉模型，没人截图的时候根本不需要帧。留着它的后果是：只要会话
-    // 开着，就会按"设备 20 秒到租期拆流 -> 泵发现死了再重起"的节拍反复对设备做停+起，
-    // 手机白烧电与带宽，而我们一帧都不看。改由 screencap 里的 wake() 按需催：那条路
-    // 现在会先看租期（FramePump 的 kSessionLeaseMs），过期就直接重起，不再花一条 RPC
-    // 去问设备"还在吗"。
-    pump_options.silence_restart_ms = 0;
-    pump_ = scrctl::media::FramePump::start(*device_, pump_options, err);
-    if (!pump_) {
-        LogError << "start media stream failed" << VAR(err);
-        device_.reset();
-        return false;
-    }
-
     scrctl::Frame first;
-    if (!pump_->latest(first, kFrameWaitMs)) {
-        // 拿不到第一帧**不算连接失败**。以前这里直接 return false，于是"画面复杂到
-        // VideoToolbox 吃不下这一帧"（实测无边记画满白线的看板，IDR 256278 字节，超过
-        // 2 字节长度前缀上限）会让整个控制单元连不上——而它其实每次截图都能拿到正确的图。
-        // 三件事各自独立：输入通路不需要这条流（实测流死了触摸照样落地）；取图还有截图
-        // 服务这条路（screencap 里的 video_unusable 快路径）；泵自己会退避重试并在解出
-        // 帧时自动回到视频路。所以这里最坏的判断也只是"暂时只能用截图服务"。
-        LogWarn << "no frame decoded within" << VAR(kFrameWaitMs)
-                << ", will use screencapture service until the video path works";
-    }
+    const bool want_stream = (screencap_methods_ & MaaIOScreencapMethod_Stream) != 0;
 
-    // 面的认证状态是流起来之后才翻的，立刻发报告会被丢掉。
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    if (!want_stream) {
+        // 调用方明确不要视频路：那就一条媒体会话都不建，后台一个解码线程都不起。
+        LogInfo << "media stream not selected, screencap will use the screenshot service only";
+    } else {
+        scrctl::media::FramePump::Options pump_options;
+        // 关掉"静默满 3 秒就自己去重起"。那是给窗口镜像用的（有人盯着，画面必须自己
+        // 回来）；自动化是拉模型，没人截图的时候根本不需要帧。留着它的后果是：只要会话
+        // 开着，就会按"设备 20 秒到租期拆流 -> 泵发现死了再重起"的节拍反复对设备做停+起，
+        // 手机白烧电与带宽，而我们一帧都不看。改由 screencap 里的 wake() 按需催：那条路
+        // 现在会先看租期（FramePump 的 kSessionLeaseDeadMs，即设备那 20 秒），过期就直接
+        // 重起，不再花一条 RPC 去问设备"还在吗"。
+        pump_options.silence_restart_ms = 0;
+        pump_ = scrctl::media::FramePump::start(*device_, pump_options, err);
+        if (!pump_) {
+            LogError << "start media stream failed" << VAR(err);
+            device_.reset();
+            return false;
+        }
+
+        if (!pump_->latest(first, kFrameWaitMs)) {
+            // 拿不到第一帧**不算连接失败**。以前这里直接 return false，于是"画面复杂到
+            // VideoToolbox 吃不下这一帧"（实测无边记画满白线的看板，IDR 256278 字节，超过
+            // 2 字节长度前缀上限）会让整个控制单元连不上——而它其实每次截图都能拿到正确的图。
+            // 三件事各自独立：输入通路不需要这条流（实测流死了触摸照样落地）；取图还有截图
+            // 服务这条路（screencap 里的 video_unusable 快路径）；泵自己会退避重试并在解出
+            // 帧时自动回到视频路。所以这里最坏的判断也只是"暂时只能用截图服务"。
+            //
+            // 但这条兜底只在调用方允许它的时候存在：只给 Stream 时没有退路，失败就该报出来。
+            LogWarn << "no frame decoded within" << VAR(kFrameWaitMs)
+                    << ", will use screencapture service until the video path works";
+        }
+
+        // 面的认证状态是流起来之后才翻的，立刻发报告会被丢掉。
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
 
     hid_ = scrctl::hid::Service::open(*device_, err);
     if (!hid_) {
@@ -94,7 +112,7 @@ bool ScrctlSession::create(const std::string& udid, std::string& err)
 
     LogInfo << "iOS session ready" << scrctl::remote::mask(udid_)
             << VAR(device_->property("ProductType")) << VAR(device_->property("OSVersion"))
-            << VAR(first.width) << VAR(first.height);
+            << VAR(screencap_methods_) << VAR(first.width) << VAR(first.height);
     return true;
 }
 
@@ -135,15 +153,22 @@ bool ScrctlSession::convert(const scrctl::Frame& frame, cv::Mat& image)
 
 bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
 {
-    if (!pump_) {
+    if (!device_) {
         err = "not connected";
         return false;
     }
 
-    if (pump_->video_unusable()) {
-        // 视频这条路已经确认走不通（单帧大到当前解码后端吃不下，见 FramePump::video_unusable）。
-        // 那就别再把预算花在等帧上：直接问截图服务。泵在后台偶尔还会重试，哪天真解出
-        // 一帧这个判断就自己消失，不需要这里做恢复逻辑。
+    const bool allow_service = (screencap_methods_ & MaaIOScreencapMethod_ScreenshotService) != 0;
+
+    // 没有泵 = 调用方压根不要视频路；video_unusable = 要了但这条路当前走不通
+    // （单帧大到解码后端吃不下，见 FramePump::video_unusable）。后者不必再花预算在等帧
+    // 上，直接问截图服务；泵在后台偶尔还会重试，哪天真解出一帧这个判断就自己消失。
+    if (!pump_ || pump_->video_unusable()) {
+        if (!allow_service) {
+            err = "no usable screencap method: video path unavailable and service not allowed";
+            LogError << err << VAR(screencap_methods_) << VAR(pump_ != nullptr);
+            return false;
+        }
         return screencap_via_service(image, err);
     }
 
@@ -179,6 +204,13 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
     // 截图各 6849/6894ms，之后泵自己判死、走快路径，稳定在 540-990ms）。
     if (pump_->serial() != 0 && pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
         return true;
+    }
+
+    if (!allow_service) {
+        // 只给了 Stream：没有退路，失败就报出来，而不是悄悄换成一条慢 40 倍的路。
+        err = "media stream produced no frame and screencapture service is not allowed";
+        LogError << err << VAR(screencap_methods_);
+        return false;
     }
 
     LogWarn << "frame pump gave nothing, falling back to screencapture service";

@@ -75,7 +75,8 @@ private:
 class IOSControlUnitLibraryHolder : public LibraryHolder<IOSControlUnitLibraryHolder>
 {
 public:
-    static std::shared_ptr<MAA_CTRL_UNIT_NS::IOSControlUnitAPI> create_control_unit(const char* udid);
+    static std::shared_ptr<MAA_CTRL_UNIT_NS::IOSControlUnitAPI>
+        create_control_unit(const char* udid, MaaIOScreencapMethod screencap_methods);
 
 private:
     inline static const std::filesystem::path libname_ = MAA_NS::path("MaaIOSControlUnit");

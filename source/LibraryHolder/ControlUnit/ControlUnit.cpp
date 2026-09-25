@@ -428,7 +428,9 @@ std::shared_ptr<MAA_CTRL_UNIT_NS::MacOSControlUnitAPI> MacOSControlUnitLibraryHo
     return std::shared_ptr<MAA_CTRL_UNIT_NS::MacOSControlUnitAPI>(control_unit_handle, destroy_control_unit_func);
 }
 
-std::shared_ptr<MAA_CTRL_UNIT_NS::IOSControlUnitAPI> IOSControlUnitLibraryHolder::create_control_unit(const char* udid)
+std::shared_ptr<MAA_CTRL_UNIT_NS::IOSControlUnitAPI> IOSControlUnitLibraryHolder::create_control_unit(
+    const char* udid,
+    MaaIOScreencapMethod screencap_methods)
 {
     if (!load_library(library_dir() / libname_)) {
         LogError << "Failed to load library" << VAR(library_dir()) << VAR(libname_);
@@ -449,7 +451,7 @@ std::shared_ptr<MAA_CTRL_UNIT_NS::IOSControlUnitAPI> IOSControlUnitLibraryHolder
         return nullptr;
     }
 
-    auto control_unit_handle = create_control_unit_func(udid);
+    auto control_unit_handle = create_control_unit_func(udid, screencap_methods);
 
     if (!control_unit_handle) {
         LogError << "Failed to create control unit";

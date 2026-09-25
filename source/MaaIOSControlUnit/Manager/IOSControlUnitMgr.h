@@ -12,7 +12,7 @@ MAA_CTRL_UNIT_NS_BEGIN
 class IOSControlUnitMgr : public IOSControlUnitAPI
 {
 public:
-    explicit IOSControlUnitMgr(std::string udid);
+    IOSControlUnitMgr(std::string udid, MaaIOScreencapMethod screencap_methods);
     ~IOSControlUnitMgr() override;
 
 public: // from ControlUnitAPI
@@ -51,6 +51,7 @@ private:
     bool refresh_display_size(std::string& err);
 
     std::string udid_;
+    MaaIOScreencapMethod screencap_methods_ = MaaIOScreencapMethod_Default;
     maa::ios_unit::ScrctlSession session_;
 
     int display_width_ = 0;

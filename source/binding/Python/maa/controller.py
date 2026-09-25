@@ -29,6 +29,7 @@ __all__ = [
     "WlRootsController",
     "LinuxController",
     "AndroidNativeController",
+    "IOSController",
     "CustomController",
 ]
 
@@ -978,11 +979,16 @@ class IOSController(Controller):
     Controls a physical iOS device over USB/LAN: screencap, click, swipe, text, app start/stop.
     """
 
-    def __init__(self, udid: str = ""):
+    def __init__(
+        self,
+        udid: str = "",
+        screencap_methods: int = MaaIOScreencapMethodEnum.Stream | MaaIOScreencapMethodEnum.ScreenshotService,
+    ):
         """创建 iOS 控制器 / Create iOS controller
 
         Args:
             udid: 设备 UDID，传空串表示使用第一台在连的设备 / device UDID, empty for the first connected device
+            screencap_methods: 允许的截图方式位掩码 / allowed screencap method bitmask
 
         Raises:
             RuntimeError: 如果创建失败
@@ -992,6 +998,7 @@ class IOSController(Controller):
 
         self._handle = Library.framework().MaaIOSControllerCreate(
             udid.encode(),
+            MaaIOScreencapMethod(screencap_methods),
         )
 
         if not self._handle:
@@ -1001,6 +1008,7 @@ class IOSController(Controller):
         Library.framework().MaaIOSControllerCreate.restype = MaaControllerHandle
         Library.framework().MaaIOSControllerCreate.argtypes = [
             ctypes.c_char_p,
+            MaaIOScreencapMethod,
         ]
 
 

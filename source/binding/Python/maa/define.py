@@ -57,6 +57,7 @@ __all__ = [
     "MaaWin32InputMethod",
     "MaaMacOSScreencapMethod",
     "MaaMacOSInputMethod",
+    "MaaIOScreencapMethod",
     "MaaLinuxScreencapMethod",
     "MaaLinuxInputMethod",
     "MaaGamepadType",
@@ -80,6 +81,7 @@ __all__ = [
     "MaaWin32InputMethodEnum",
     "MaaMacOSScreencapMethodEnum",
     "MaaMacOSInputMethodEnum",
+    "MaaIOScreencapMethodEnum",
     "MaaLinuxScreencapMethodEnum",
     "MaaLinuxInputMethodEnum",
     "MaaGamepadTypeEnum",
@@ -552,6 +554,34 @@ class MaaMacOSInputMethodEnum(IntEnum):
 
     GlobalEvent = 1
     PostToPid = 1 << 1
+
+
+MaaIOScreencapMethod = ctypes.c_uint64
+
+
+class MaaIOScreencapMethodEnum(IntEnum):
+    """
+    iOS screencap method flags.
+
+    Use bitwise OR to set the methods you need.
+    MaaFramework will use the fastest method that is actually working and fall
+    back to the slower ones when it is not.
+
+    Default: All methods
+
+    Note: Stream carries HEVC, so it is lossy. Pick ScreenshotService only when
+    pixel-exact matching matters more than per-frame latency.
+
+    | Method            | Speed     | Compatibility | Encoding | Notes                                  |
+    |-------------------|-----------|---------------|----------|----------------------------------------|
+    | Stream            | Very Fast | Medium        | Lossy    | ~13ms/frame, decodes in background     |
+    | ScreenshotService | Medium    | High          | Lossless | ~147ms/frame, no media session at all  |
+    """
+
+    Null = 0
+
+    Stream = 1
+    ScreenshotService = 1 << 1
 
 
 MaaLinuxScreencapMethod = ctypes.c_uint64

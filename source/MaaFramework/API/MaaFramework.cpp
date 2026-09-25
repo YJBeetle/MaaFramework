@@ -97,9 +97,9 @@ MaaController* MaaMacOSControllerCreate(uint32_t window_id, MaaMacOSScreencapMet
 #endif
 }
 
-MaaController* MaaIOSControllerCreate(const char* udid)
+MaaController* MaaIOSControllerCreate(const char* udid, MaaIOScreencapMethod screencap_methods)
 {
-    LogFunc << VAR(udid);
+    LogFunc << VAR(udid) << VAR(screencap_methods);
 
 #ifndef __APPLE__
 
@@ -108,7 +108,7 @@ MaaController* MaaIOSControllerCreate(const char* udid)
 
 #else
 
-    auto control_unit = MAA_NS::IOSControlUnitLibraryHolder::create_control_unit(udid);
+    auto control_unit = MAA_NS::IOSControlUnitLibraryHolder::create_control_unit(udid, screencap_methods);
 
     if (!control_unit) {
         LogError << "Failed to create control unit";

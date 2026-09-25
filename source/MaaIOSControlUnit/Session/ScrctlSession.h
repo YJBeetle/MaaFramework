@@ -7,6 +7,8 @@
 
 #include <opencv2/core/mat.hpp>
 
+#include "MaaFramework/MaaDef.h"
+
 namespace scrctl
 {
 struct Frame;
@@ -49,15 +51,24 @@ public:
 
     /// 建立会话。udid 为空表示"恰好一台就用它"，多台时报错并列出候选。
     ///
-    /// 成功后**媒体流一直在跑**，它是"看现在屏幕上是什么"的唯一快路径：取最新一帧
-    /// 中位 16.6ms，而截图 RPC 要 226ms。
+    /// `screencap_methods` 决定取图用哪几条路（见 MaaIOScreencapMethod）：
+    /// - 带 Stream：起一条媒体流当快路径，2026-09-25 经 MaaFW 实测中位 13ms/张，代价是
+    ///   后台常驻解码，以及设备会自己结束空闲会话。
+    /// - 只带 ScreenshotService：**根本不建媒体会话、不起泵**，每次截图一条
+    ///   capturescreenshot RPC。实测中位 147ms（137~262ms），约快路的 10 倍开销，换来
+    ///   零后台解码和无损图。
+    ///   ⚠ 别把这个数和其它地方见过的 540~990ms 混为一谈：那是**从视频路降级过去**的
+    ///   单次调用，里面还含着等帧预算（kFirstFrameWaitMs + kFrameWaitMs 那几段），不是
+    ///   截图服务本身的开销。拿"降级耗时"给"服务本身"定价，会高估它 4 倍。
+    /// - 两个都给就是"快的优先、坏了自动降级"，这是默认。只给 Stream 则没有退路：
+    ///   复杂画面（单帧超过解码后端上限）会直接失败而不是偷偷变慢。
     ///
     /// 它**不是**触摸注入的前提。早先 scrctl 里记着"没有流在跑时设备把 HID 面标成
     /// 未认证、backboardd 会静默丢掉每个触摸事件"，2026-09-25 用
     /// scrctl/tools/hid_gate_probe 复测推翻了：设备自己结束空闲会话之后、我们主动
     /// 拆掉会话之后、甚至全新进程一次流都没起过，注入实测都照样落地。所以下面几个
     /// 输入方法都不催流（见 scrctl/docs/coredevice.md §11）。
-    bool create(const std::string& udid, std::string& err);
+    bool create(const std::string& udid, MaaIOScreencapMethod screencap_methods, std::string& err);
 
     void close();
 
@@ -110,6 +121,9 @@ private:
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     std::string udid_;
+    /// create() 时拿到的那张位掩码，screencap() 每次照它选路。泵为空不等于没连上，
+    /// 也可能是调用方压根不要视频路，所以这两件事要分开记。
+    MaaIOScreencapMethod screencap_methods_ = MaaIOScreencapMethod_Default;
 };
 
 } // namespace maa::ios_unit

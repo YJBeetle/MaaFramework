@@ -57,6 +57,8 @@ extern "C"
      *
      * @param udid The device UDID, or NULL to use the only connected device. When several
      *             devices are attached, passing NULL fails rather than guessing.
+     * @param screencap_methods Bitmask of allowed screencap methods, see MaaIOScreencapMethod.
+     *                          With more than one set, the fastest working one is used.
      * @return The controller handle, or nullptr on failure.
      *
      * @note Runs entirely in userspace over USB: no root, no jailbreak, no WebDriverAgent,
@@ -65,10 +67,15 @@ extern "C"
      *       mounted; Xcode mounts it automatically for registered devices.
      * @note Screencap returns the logical display at native scale; touch coordinates are
      *       in that same pixel space.
-     * @note Not supported: start_app, stop_app, input_text, key_down/key_up, scroll,
-     *       relative_move. `click_key` maps to hardware buttons only (home/lock/volume).
+     * @note Setting MaaIOScreencapMethod_ScreenshotService alone never opens a media stream,
+     *       so nothing is decoded in the background; it costs roughly 10x more per frame
+     *       (median 147ms vs 13ms, measured on an iPhone 14,4 over USB).
+     * @note start_app / stop_app take a bundle identifier. Not supported: scroll,
+     *       relative_move, key_down/key_up. `click_key` maps to hardware buttons only
+     *       (home/lock/volume).
      */
-    MAA_FRAMEWORK_API MaaController* MaaIOSControllerCreate(const char* udid);
+    MAA_FRAMEWORK_API MaaController*
+        MaaIOSControllerCreate(const char* udid, MaaIOScreencapMethod screencap_methods);
 
     /**
      * @brief Create an Android native controller backed by MaaAndroidNativeControlUnit.

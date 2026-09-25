@@ -291,6 +291,9 @@ bool IOSControlUnitMgr::inactive()
 json::object IOSControlUnitMgr::get_info() const
 {
     json::object info;
+    // type 不是装饰：MaaControllerGetInfo 会校验它，缺了就整条 info 报
+    // "missing or invalid type field" 并返回失败（各控制单元都靠这个字段自报家门）。
+    info["type"] = "ios";
     info["udid"] = session_.udid();
     info["product_type"] = session_.device_property("ProductType");
     info["os_version"] = session_.device_property("OSVersion");

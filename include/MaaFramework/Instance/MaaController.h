@@ -231,6 +231,16 @@ extern "C"
 
     MAA_FRAMEWORK_API MaaCtrlId MaaControllerPostConnection(MaaController* ctrl);
 
+    /**
+     * @brief Post a tap at (x, y).
+     *
+     * @note x/y are in the coordinate space of the **scaled** screenshot returned by
+     *       MaaControllerCachedImage, not raw device pixels. The framework rescales them
+     *       back to the raw space before handing them to the control unit
+     *       (MaaControllerGetResolution reports that raw size; setting
+     *       MaaCtrlOption_ScreenshotUseRawSize makes the two spaces identical).
+     * @see MaaControllerPostScreencap, MaaControllerGetResolution, MaaCtrlOption_ScreenshotUseRawSize
+     */
     MAA_FRAMEWORK_API MaaCtrlId MaaControllerPostClick(MaaController* ctrl, int32_t x, int32_t y);
 
     // for adb controller, contact means finger id (0 for first finger, 1 for second finger, etc)

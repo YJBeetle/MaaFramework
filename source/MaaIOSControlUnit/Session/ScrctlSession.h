@@ -38,9 +38,10 @@ namespace maa::ios_unit
 /// 这是 scrctl 与 MaaFramework 之间唯一的边界：上面这层只讲"截图 / 点 / 滑 /
 /// 按键"，不讲 XPC、RTP 也不讲 HID 报告。
 ///
-/// 截图走视频流而不是 screencaptureservice：实测取最新一帧中位 16.6ms，而截图
-/// RPC 是 226ms —— Maa 的整个循环是"截图 -> 识别 -> 动作"，这个差别决定任务能
-/// 跑多快。截图 RPC 留作兜底（流万一没帧可取）。
+/// 截图有两条路：视频流的最新一帧，和 capturescreenshot RPC。前者实测中位 13~28ms，
+/// 后者 147ms —— Maa 的整个循环是"截图 -> 识别 -> 动作"，这个差别决定任务能跑多快。
+/// 但视频流是有损的、要常驻解码，所以选哪条（或两条都给、坏了自动降级）交给调用方，
+/// 见 create() 的 `screencap_methods`。
 class ScrctlSession {
 public:
     ScrctlSession();
@@ -53,7 +54,8 @@ public:
     ///
     /// `screencap_methods` 决定取图用哪几条路（见 MaaIOScreencapMethod）：
     /// - 带 Stream：起一条媒体流当快路径，2026-09-25 经 MaaFW 实测中位 13ms/张，代价是
-    ///   后台常驻解码，以及设备会自己结束空闲会话。
+    ///   后台常驻解码和有损图。会话不会自己断——那条租期是我们自己报的（scrctl 现在报
+    ///   3600 秒），而且泵每秒发一次 RTCP RR 续着它；静置 90 秒后首张仍是 28ms、不重起。
     /// - 只带 ScreenshotService：**根本不建媒体会话、不起泵**，每次截图一条
     ///   capturescreenshot RPC。实测中位 147ms（137~262ms），约快路的 10 倍开销，换来
     ///   零后台解码和无损图。
@@ -65,8 +67,8 @@ public:
     ///
     /// 它**不是**触摸注入的前提。早先 scrctl 里记着"没有流在跑时设备把 HID 面标成
     /// 未认证、backboardd 会静默丢掉每个触摸事件"，2026-09-25 用
-    /// scrctl/tools/hid_gate_probe 复测推翻了：设备自己结束空闲会话之后、我们主动
-    /// 拆掉会话之后、甚至全新进程一次流都没起过，注入实测都照样落地。所以下面几个
+    /// scrctl/tools/hid_gate_probe 复测推翻了：会话停掉之后、我们主动拆掉会话之后、
+    /// 甚至全新进程一次流都没起过，注入实测都照样落地。所以下面几个
     /// 输入方法都不催流（见 scrctl/docs/coredevice.md §11）。
     bool create(const std::string& udid, MaaIOScreencapMethod screencap_methods, std::string& err);
 

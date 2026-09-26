@@ -66,6 +66,16 @@
                 "screencap": "ScreenCaptureKit", // 截图方式
                 "input": "GlobalEvent" // 输入方式
             }
+        },
+        {
+            "name": "iPhone",
+            "label": "$iPhone端",
+            "description": "通过 Xcode CoreDevice 通道连接真机 iPhone（仅 macOS，USB 即可）",
+            "type": "IOS",
+            "ios": {
+                "udid": "", // 留空表示"只连了一台就用它"
+                "screencap": "Stream|ScreenshotService" // 截图方式，可叠加；详见 2.4-控制方式说明.md 的 iOS Screencap
+            }
         }
     ],
     "resource": [

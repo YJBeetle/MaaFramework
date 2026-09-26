@@ -27,8 +27,10 @@ static bool s_eof = false;
 
 #if defined(__APPLE__)
 static constexpr bool kPlayCoverSupported = true;
+static constexpr bool kIOSSupported = true;
 #else
 static constexpr bool kPlayCoverSupported = false;
+static constexpr bool kIOSSupported = false;
 #endif
 
 #if defined(_WIN32)
@@ -350,6 +352,15 @@ void Interactor::print_config() const
                 macos.screencap,
                 macos.input));
     } break;
+    case InterfaceData::Controller::Type::IOS: {
+        const auto& ios = config_.configuration().ios;
+        std::cout << MAA_NS::utf8_to_crt(
+            std::format("\t\tUDID: {}\n\t\tScreencap: {}\n", ios.udid.empty() ? "(any single connected device)" : ios.udid,
+                        ios.screencap));
+        if (!kIOSSupported) {
+            std::cout << "\t\t(iOS is only available on macOS)\n";
+        }
+    } break;
     case InterfaceData::Controller::Type::PlayCover: {
         const auto& pc = config_.configuration().playcover;
         if (!pc.address.empty() && !pc.uuid.empty()) {
@@ -607,6 +618,9 @@ void Interactor::select_controller()
             if (ctrl.type == InterfaceData::Controller::Type::Gamepad && !kGamepadSupported) {
                 std::cout << " (Windows only)";
             }
+            if (ctrl.type == InterfaceData::Controller::Type::IOS && !kIOSSupported) {
+                std::cout << " (macOS only)";
+            }
             std::cout << "\n";
             if (!ctrl.description.empty()) {
                 std::string desc_text = read_text_content(ctrl.description);
@@ -636,6 +650,25 @@ void Interactor::select_controller()
     case InterfaceData::Controller::Type::MacOS:
         config_.configuration().controller.type = InterfaceData::Controller::Type::MacOS;
         select_macos(controller.macos);
+        break;
+    case InterfaceData::Controller::Type::IOS:
+        if (!kIOSSupported) {
+            std::cout << "\niOS controller is only available on macOS.\n";
+            bool has_other_controllers =
+                std::ranges::any_of(all_controllers, [](const auto& ctrl) { return ctrl.type != InterfaceData::Controller::Type::IOS; });
+            if (has_other_controllers) {
+                std::cout << "Please select another controller.\n\n";
+                mpause();
+                select_controller();
+            }
+            else {
+                std::cout << "No other controllers available.\n\n";
+                mpause();
+            }
+            return;
+        }
+        config_.configuration().controller.type = InterfaceData::Controller::Type::IOS;
+        select_ios(controller.ios);
         break;
     case InterfaceData::Controller::Type::PlayCover:
         if (!kPlayCoverSupported) {
@@ -810,6 +843,56 @@ void Interactor::select_playcover(const MAA_PROJECT_INTERFACE_NS::InterfaceData:
     }
 
     pc.address = buffer.empty() ? default_address : buffer;
+    std::cout << "\n";
+}
+
+void Interactor::select_ios(const MAA_PROJECT_INTERFACE_NS::InterfaceData::Controller::IOSConfig& ios_config)
+{
+    std::cout << "### Configure iOS device ###\n\n";
+
+    auto& ios = config_.configuration().ios;
+
+    if (ios.udid.empty()) {
+        ios.udid = ios_config.udid;
+    }
+
+    std::cout << "Device UDID. Leave it empty to use the only connected iPhone\n"
+                 "(if several are connected it will refuse and list them for you).\n";
+    std::cout << "UDID [" << (ios.udid.empty() ? "auto" : ios.udid) << "]: ";
+    std::cin.sync();
+    std::string buffer;
+    std::getline(std::cin, buffer);
+
+    if (std::cin.eof()) {
+        s_eof = true;
+        return;
+    }
+    if (!buffer.empty()) {
+        ios.udid = buffer;
+    }
+    std::cout << "\n";
+
+    std::cout << "### Select screencap method ###\n\n";
+    std::cout << "\t1. Stream: media stream, ~13ms per shot, but lossy and needs a decoder running\n";
+    std::cout << "\t2. ScreenshotService: one RPC per shot, ~150-230ms, lossless, no background work\n";
+    std::cout << "\t3. Both: stream first, fall back to the service when a frame cannot be decoded\n";
+
+    int choice = input(3, "Choose screencap method");
+    if (s_eof) {
+        return;
+    }
+
+    switch (choice) {
+    case 1:
+        ios.screencap = "Stream";
+        break;
+    case 2:
+        ios.screencap = "ScreenshotService";
+        break;
+    default:
+        ios.screencap = "Stream|ScreenshotService";
+        break;
+    }
     std::cout << "\n";
 }
 
@@ -1795,6 +1878,19 @@ bool Interactor::check_validity()
 
             select_macos(controller_iter->macos);
             return mac.window_id != 0;
+        }
+    }
+
+    if (config_.configuration().controller.type == InterfaceData::Controller::Type::IOS) {
+        if (!kIOSSupported) {
+            LogError << "iOS controller is only available on macOS";
+            return false;
+        }
+
+        // udid 可以留空（"只连了一台就用它"），所以它不是必填项；取图方式空着补成默认。
+        auto& ios = config_.configuration().ios;
+        if (ios.screencap.empty()) {
+            ios.screencap = "Stream|ScreenshotService";
         }
     }
 

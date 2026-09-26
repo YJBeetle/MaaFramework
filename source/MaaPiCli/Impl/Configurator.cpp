@@ -91,6 +91,42 @@ MaaMacOSInputMethod parse_macos_input_method(const std::string& method)
     return MaaMacOSInputMethod_None;
 }
 
+MaaIOScreencapMethod parse_ios_screencap_method(const std::string& method)
+{
+    static const std::unordered_map<std::string, MaaIOScreencapMethod> mapping = {
+        { "Stream", MaaIOScreencapMethod_Stream },
+        { "ScreenshotService", MaaIOScreencapMethod_ScreenshotService },
+        { "Service", MaaIOScreencapMethod_ScreenshotService },
+    };
+
+    // 它是个位掩码，所以允许叠写："Stream|ScreenshotService"、"Stream, ScreenshotService" 都收。
+    MaaIOScreencapMethod result = MaaIOScreencapMethod_None;
+    std::vector<std::string> tokens;
+    for (auto&& pipe : string_split(method, '|')) {
+        for (auto&& comma : string_split(pipe, ',')) {
+            tokens.push_back(comma);
+        }
+    }
+
+    for (auto& token : tokens) {
+        string_trim_(token);
+        if (token.empty()) {
+            continue;
+        }
+        if (token == "All" || token == "Default") {
+            result |= MaaIOScreencapMethod_All;
+            continue;
+        }
+        auto it = mapping.find(token);
+        if (it == mapping.end()) {
+            LogError << "Unknown iOS screencap method" << VAR(token);
+            return MaaIOScreencapMethod_None;
+        }
+        result |= it->second;
+    }
+    return result;
+}
+
 MaaLinuxScreencapMethod parse_linux_screencap_method(const std::string& method)
 {
     static const std::unordered_map<std::string, MaaLinuxScreencapMethod> mapping = {
@@ -292,6 +328,22 @@ std::optional<RuntimeParam> Configurator::generate_runtime() const
         }
 
         runtime.controller_param = std::move(macos);
+    } break;
+
+    case InterfaceData::Controller::Type::IOS: {
+        RuntimeParam::IOSParam ios;
+
+        ios.udid = config_.ios.udid;
+
+        if (!controller.ios.screencap.empty()) {
+            ios.screencap = parse_ios_screencap_method(controller.ios.screencap);
+        }
+        if (ios.screencap == MaaIOScreencapMethod_None) {
+            ios.screencap = MaaIOScreencapMethod_Default;
+        }
+
+        // udid 留空是合法的：控制单元按"恰好一台就用它"处理，多台时才报错列候选。
+        runtime.controller_param = std::move(ios);
     } break;
 
     case InterfaceData::Controller::Type::PlayCover: {

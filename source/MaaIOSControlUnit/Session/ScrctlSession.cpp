@@ -184,6 +184,8 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
     // 看过的"当起点，这张旧帧只要比它新就会被当成新帧交出去（实测：截图耗时 3ms，内容
     // 与动作前逐像素一致），对自动化来说这是最坏的一种错，因为它返回真、看着是成功的。
     const uint64_t floor_serial = pump_->serial();
+    // 同一时刻把泵的账也拍一张快照，事后用来分清"没有新帧"到底是哪种原因，见下面 starving。
+    const scrctl::media::FramePump::Stats stats_before = pump_->stats();
     // 会话还新鲜（心跳还在）时 wake() 是空操作，所以每次截图都催得起。去掉
     // 这一句的话，"静置到流停 -> swipe -> 截图"实测会一直交出停流前那张旧图。租期已过
     // 时它走的是泵里那条"不问、直接重起"的快路。
@@ -206,11 +208,27 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
     // 没在救流又等不到新帧：流活着而画面本来就静止——"最新一帧"就是当前画面，
     // 交出去是对的。再拿不到才退回截图 RPC。
     //
-    // 但泵**一个帧都没解出来过**时（serial()==0）这一步没有意义：不是"画面静止所以
-    // 没有新帧"，而是这条流根本还没产出过任何东西，再等 3 秒也是零。省掉它能把降级
+    // 但"等不到新帧"还有第三种原因，恰恰是 latest() 这条路最危险的漏：流活着、码流
+    // 也一直进来，只是每一帧都被解码那侧丢掉了（单帧超过后端上限、丢了分片在等干净的
+    // 关键帧、解了出不来图）。这时 serial() 不动而泵的账一直在涨，latest() 交出的是
+    // **上一次成功解码那一刻**的画面——屏幕早就变了，返回值却是真的、看着成功。实测：
+    // 从看板列表点进那块画满白线的画板，进板前后两次截图逐像素一致（都是列表，26336
+    // 个亮点），而屏上其实已经是 187000 个亮点。
+    //
+    // 分得开，因为泵把每一层的丢弃都记了账：等帧这段时间里流水线的计数器涨过而帧号
+    // 没涨，就说明"没新帧"是解不出来，不是屏幕静止，那张旧帧不能交。
+    const scrctl::media::FramePump::Stats stats_after = pump_->stats();
+    const auto pipeline_progress = [](const scrctl::media::FramePump::Stats& s) {
+        return s.aus + s.decoded + s.no_output + s.dropped + s.dropped_oversized + s.dropped_awaiting_keyframe
+               + s.dropped_fragments + s.gaps + s.restarts;
+    };
+    const bool starving = pipeline_progress(stats_after) > pipeline_progress(stats_before);
+
+    // 另外泵**一个帧都没解出来过**时（serial()==0）这一步本来就没有意义：不是"画面静止
+    // 所以没有新帧"，而是这条流根本还没产出过任何东西，再等 3 秒也是零。省掉它能把降级
     // 头两轮的单次截图从 ~6.9 秒压到 ~3.9 秒（实测：无边记那块解不了的画板上头两次
     // 截图各 6849/6894ms，之后泵自己判死、走快路径，稳定在 540-990ms）。
-    if (pump_->serial() != 0 && pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
+    if (!starving && pump_->serial() != 0 && pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
         return true;
     }
 
@@ -221,7 +239,8 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
         return false;
     }
 
-    LogWarn << "frame pump gave nothing, falling back to screencapture service";
+    LogWarn << "frame pump gave nothing, falling back to screencapture service" << VAR(starving)
+            << VAR(floor_serial) << VAR(pump_->serial());
     return screencap_via_service(image, err);
 }
 

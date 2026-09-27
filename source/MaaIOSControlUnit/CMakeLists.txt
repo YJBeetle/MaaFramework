@@ -19,21 +19,30 @@ if(NOT EXISTS ${SCRCTL_SOURCE_DIR}/CMakeLists.txt)
             " -DSCRCTL_SOURCE_DIR=/path/to/scrctl")
 endif()
 
-file(GLOB_RECURSE maa_ios_control_unit_src *.h *.hpp *.cpp)
-file(GLOB_RECURSE maa_ios_control_unit_header ${MAA_PUBLIC_INC}/MaaControlUnit/IOSControlUnitAPI.h
+file(GLOB_RECURSE maa_ios_control_unit_src CONFIGURE_DEPENDS *.h *.hpp *.cpp)
+file(GLOB_RECURSE maa_ios_control_unit_header CONFIGURE_DEPENDS ${MAA_PUBLIC_INC}/MaaControlUnit/IOSControlUnitAPI.h
                                               ${MAA_PUBLIC_INC}/MaaControlUnit/ControlUnitAPI.h)
 
+# CONFIGURE_DEPENDS 是必需的，不是锦上添花：scrctl 的源码是 glob 进来的，而 glob
+# 只在配置期求值。scrctl 那边新增一个 .cpp 时，这里不会自动看见，症状是链接期报
+# undefined symbol（真发生过：新增 src/rt/RtpSeq.cpp）。加了它，构建系统每次 build
+# 前重新 glob，改了 scrctl 之后直接 cmake --build 就够，不用记得重跑 configure。
+
 # scrctl 的 src/app/ 是它的命令行程序（带 main()），不能进库。
-file(GLOB_RECURSE scrctl_core_src ${SCRCTL_SOURCE_DIR}/src/*.cpp ${SCRCTL_SOURCE_DIR}/src/*.h)
+file(GLOB_RECURSE scrctl_core_src CONFIGURE_DEPENDS ${SCRCTL_SOURCE_DIR}/src/*.cpp ${SCRCTL_SOURCE_DIR}/src/*.h)
 list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/app/.*")
 
-# 解码后端按平台挑，挑完只能有一个 create_platform_decoder() 的定义：
-# 非 Apple 用 PlatformDecoderFallback.cpp，Apple 用 VideoToolboxDecoder.cpp。
-# 两个都在就是 duplicate symbol。
+# 解码后端按平台挑，视频和音频各一对，挑完每样只能有一个工厂函数的定义：
+#   create_platform_decoder()  非 Apple 用 PlatformDecoderFallback.cpp / Apple 用 VideoToolboxDecoder.cpp
+#   create_audio_decoder()     非 Apple 用 AudioDecoderNone.cpp      / Apple 用 AudioToolboxEldDecoder.cpp
+# 一对里两个都在就是 duplicate symbol。规则要和 scrctl 自己 CMakeLists 的 target_sources
+# 保持一致，它才是权威。
 if(APPLE)
     list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/PlatformDecoderFallback.cpp")
+    list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/AudioDecoderNone.cpp")
 else()
     list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/VideoToolboxDecoder.cpp")
+    list(FILTER scrctl_core_src EXCLUDE REGEX ".*/src/decode/AudioToolboxEldDecoder.cpp")
 endif()
 
 # 软解后端（libavcodec）**故意不编进来**：这个 dylib 要能被 dlopen 就走，多一个
@@ -60,17 +69,21 @@ target_include_directories(MaaIOSControlUnit
 
 target_link_libraries(MaaIOSControlUnit PRIVATE MaaUtils ${OpenCV_LIBS} OpenSSL::SSL OpenSSL::Crypto)
 
-# scrctl 的解码后端要这三个框架（照 scrctl 自己的 CMakeLists 来，不多链一个）。
+# scrctl 的解码后端要这几个框架（照 scrctl 自己的 CMakeLists 来，不多链一个）。
 find_library(CORE_FOUNDATION CoreFoundation REQUIRED)
 find_library(VIDEO_TOOLBOX VideoToolbox REQUIRED)
 find_library(CORE_MEDIA CoreMedia REQUIRED)
 find_library(CORE_VIDEO CoreVideo REQUIRED)
+# AudioToolboxEldDecoder 用的是 AudioConverter*，在 AudioToolbox 里；它和
+# VideoToolboxDecoder 一样是"按平台挑出来的那一个后端"，所以 Apple 上必须链。
+find_library(AUDIO_TOOLBOX AudioToolbox REQUIRED)
 
 target_link_libraries(MaaIOSControlUnit PRIVATE
     ${CORE_FOUNDATION}
     ${VIDEO_TOOLBOX}
     ${CORE_MEDIA}
-    ${CORE_VIDEO})
+    ${CORE_VIDEO}
+    ${AUDIO_TOOLBOX})
 
 target_compile_definitions(MaaIOSControlUnit PRIVATE MAA_CONTROL_UNIT_EXPORTS)
 

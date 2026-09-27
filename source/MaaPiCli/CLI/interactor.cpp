@@ -873,8 +873,9 @@ void Interactor::select_ios(const MAA_PROJECT_INTERFACE_NS::InterfaceData::Contr
     std::cout << "\n";
 
     std::cout << "### Select screencap method ###\n\n";
-    std::cout << "\t1. Stream: media stream, ~13ms per shot, but lossy and needs a decoder running\n";
-    std::cout << "\t2. ScreenshotService: one RPC per shot, ~150-230ms, lossless, no background work\n";
+    std::cout << "\t1. Stream: media stream, ~15ms per shot, but lossy and needs a decoder running\n";
+    std::cout << "\t2. ScreenshotService: one RPC per shot, ~170ms on a simple screen and several\n";
+    std::cout << "\t   hundred ms on a busy one; lossless, no background work\n";
     std::cout << "\t3. Both: stream first, fall back to the service when a frame cannot be decoded\n";
 
     int choice = input(3, "Choose screencap method");

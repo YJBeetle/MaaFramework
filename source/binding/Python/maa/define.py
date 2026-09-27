@@ -572,10 +572,14 @@ class MaaIOScreencapMethodEnum(IntEnum):
     Note: Stream carries HEVC, so it is lossy. Pick ScreenshotService only when
     pixel-exact matching matters more than per-frame latency.
 
-    | Method            | Speed     | Compatibility | Encoding | Notes                                  |
-    |-------------------|-----------|---------------|----------|----------------------------------------|
-    | Stream            | Very Fast | Medium        | Lossy    | ~13ms/frame, decodes in background     |
-    | ScreenshotService | Medium    | High          | Lossless | ~147ms/frame, no media session at all  |
+    | Method            | Speed     | Compatibility | Encoding | Notes                              |
+    |-------------------|-----------|---------------|----------|------------------------------------|
+    | Stream            | Very Fast | Medium        | Lossy    | 14-17ms/frame, decodes in background |
+    | ScreenshotService | Slow      | High          | Lossless | 113-891ms/frame, no media session    |
+
+    ScreenshotService cost tracks how large the device's PNG comes out, not how busy the
+    screen looks: 167ms on a list screen, 743ms on a marker-filled board, 518ms on a far
+    denser fine-line mesh. Do not treat it as a constant multiple of Stream.
     """
 
     Null = 0

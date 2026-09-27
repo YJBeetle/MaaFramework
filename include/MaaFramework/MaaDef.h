@@ -477,10 +477,15 @@ typedef uint64_t MaaMacOSInputMethod;
  * Note: Stream carries HEVC, so it is lossy; pick ScreenshotService only when
  * pixel-exact matching matters more than per-frame latency.
  *
+ * Latency below is measured on an iPhone 14,4 / iOS 27 over USB, 2026-09-27.
+ * ScreenshotService cost is dominated by how big the device's PNG comes out and is
+ * NOT monotone in how busy the screen looks: 167ms median on the board list,
+ * 743ms on a board of thick marker bars, 518ms on a far denser fine-line mesh.
+ *
  * | Method            | Speed     | Compatibility | Encoding | Notes                                                  |
  * |-------------------|-----------|---------------|----------|--------------------------------------------------------|
- * | Stream            | Very Fast | Medium        | Lossy    | live media stream; the device ends idle sessions on its own |
- * | ScreenshotService | Medium    | High          | Lossless | one-shot capturescreenshot RPC, ~10x Stream per frame  |
+ * | Stream            | Very Fast | Medium        | Lossy    | live media stream, 14-17ms median per shot             |
+ * | ScreenshotService | Slow      | High          | Lossless | one-shot capturescreenshot RPC, 113-891ms per shot     |
  */
 typedef uint64_t MaaIOScreencapMethod;
 #define MaaIOScreencapMethod_None 0ULL

@@ -66,10 +66,20 @@ extern "C"
      * @note Requires the device to be paired (trusted) and to have a Developer Disk Image
      *       mounted; Xcode mounts it automatically for registered devices.
      * @note Screencap returns the logical display at native scale; touch coordinates are
-     *       in that same pixel space.
+     *       in that same pixel space (before the framework's screenshot scaling, see
+     *       MaaControllerPostClick).
      * @note Setting MaaIOScreencapMethod_ScreenshotService alone never opens a media stream,
-     *       so nothing is decoded in the background; it costs roughly 10x more per frame
-     *       (median 147ms vs 13ms, measured on an iPhone 14,4 over USB).
+     *       so nothing is decoded in the background. It costs 10x to 40x more per frame:
+     *       14-17ms median over the stream vs 113-891ms per RPC (iPhone 14,4 / iOS 27, USB,
+     *       2026-09-27). The RPC cost tracks the size of the PNG the device produces, not
+     *       how busy the screen looks.
+     * @note With both methods set, a screen the decoder cannot handle (a single NAL above
+     *       the platform backend's 2-byte length prefix, measured at 256278 bytes on a
+     *       densely scribbled Freeform board) falls back to the RPC. The first few calls
+     *       pay the frame-wait budget before that is latched; steady state measured 860ms
+     *       on that board vs 518ms for ScreenshotService alone.
+     * @note With Stream alone such a screen fails every shot rather than silently
+     *       degrading, and connecting it costs ~7s of restart attempts.
      * @note start_app / stop_app take a bundle identifier. Not supported: scroll,
      *       relative_move, key_down/key_up. `click_key` maps to hardware buttons only
      *       (home/lock/volume).

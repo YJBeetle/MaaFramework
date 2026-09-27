@@ -1,5 +1,6 @@
 #include "ScrctlSession.h"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
@@ -7,10 +8,12 @@
 #include <MaaUtils/NoWarningCV.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "app/ViewGeom.h"
 #include "hid/Hid.h"
 #include "media/FramePump.h"
 #include "remote/App.h"
 #include "remote/Device.h"
+#include "remote/DisplayInfo.h"
 #include "xpc/XpcValue.h"
 
 namespace maa::ios_unit
@@ -20,6 +23,9 @@ namespace
 {
 
 constexpr int kFrameWaitMs = 3000;
+/// 主屏在这台设备上的 displayId（实测 displayinfoupdates 报 primary 那块就是 1）。
+/// 起流用的也是它——FramePump::Options::display_id 的默认值同为 1。
+constexpr uint64_t kDisplayId = 1;
 /// 第一段等帧预算。屏幕在动时一帧 16ms 就到，这个预算只在"流活着但画面静止到不发帧
 /// 了"的那段窗口里付：静止画面上设备一个视频包都不发（只剩每秒那个 SR 心跳）。这段
 /// 窗口现在可以很长——会话的租期是我们在请求里报的（scrctl 报 3600 秒），过去那个数
@@ -64,6 +70,19 @@ bool ScrctlSession::create(const std::string& udid, MaaIOScreencapMethod screenc
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*device));
     udid_ = device_->udid();
+
+    // 界面朝向必须单独问，两条取图路都靠它：视频帧**永远不跟着转**（实测界面 rot90 放
+    // 横屏视频时码流仍是 1125x2436 竖幅、内容躺 90 度），而截图服务给的已经是转正的
+    // 2436x1125。不订这个的话，both 模式返回哪张图取决于这次是谁服务的，模板匹配会
+    // 在降级的那一次上莫名其妙地失败。订不上不算错：退回"不转"，画面躺着但和触摸一致。
+    {
+        std::string watcher_err;
+        watcher_ = scrctl::remote::DisplayWatcher::start(*device_, kDisplayId, watcher_err);
+        if (!watcher_) {
+            LogWarn << "displayinfoupdates subscribe failed, screen will not follow rotation"
+                    << VAR(watcher_err);
+        }
+    }
 
     scrctl::Frame first;
     const bool want_stream = (screencap_methods_ & MaaIOScreencapMethod_Stream) != 0;
@@ -127,6 +146,8 @@ void ScrctlSession::close()
     buttons_.reset();
     // 泵先停：它拥有那条会话，析构时会调 stopmediastream。
     pump_.reset();
+    // 订阅线程持有 Device&，必须在 device_ 之前停。
+    watcher_.reset();
     device_.reset();
     udid_.clear();
 }
@@ -154,6 +175,71 @@ bool ScrctlSession::convert(const scrctl::Frame& frame, cv::Mat& image)
     cv::Mat cropped = bgra(cv::Rect(crop.x, crop.y, crop.w, crop.h));
     cv::cvtColor(cropped, image, cv::COLOR_BGRA2BGR);
     return !image.empty();
+}
+
+// 只有**码流**这条路需要转正：编码帧永远躺在面板轴上（实测界面 rot90 时帧仍是
+// 1125x2436 竖幅，内容侧着）。截图服务交出来的 PNG 是设备自己合成、已经正立的（同
+// 一屏横屏视频它给 2436x1125），再转一次就把正立的图转歪了。所以这一步留给流的
+// 两个取帧点调用，不放在 convert() 里。
+//
+// degrees 的含义是"顺时针转多少度得到正立"（拿真机对出来的，见 scrctl 的 ViewGeom.h）。
+void ScrctlSession::rotate_to_upright(cv::Mat& image) const
+{
+    switch (orientation_degrees()) {
+    case 90:
+        cv::rotate(image, image, cv::ROTATE_90_CLOCKWISE);
+        break;
+    case 180:
+        cv::rotate(image, image, cv::ROTATE_180);
+        break;
+    case 270:
+        cv::rotate(image, image, cv::ROTATE_90_COUNTERCLOCKWISE);
+        break;
+    default:
+        break;
+    }
+}
+
+int ScrctlSession::orientation_degrees() const
+{
+    if (!watcher_) {
+        return 0;
+    }
+    // 认不出来的值（包括还没收到过任何推送）一律当 0：转歪比不转更糟——不转只是画面
+    // 躺着、触摸仍和画面一致，转歪则是两边全都错。这条规则和那张反变换表都在 scrctl
+    // 的 ViewGeom.h 里，并且那边有测试，所以这里用它，不在 MaaFW 再抄一份。
+    return scrctl::app::orientation_degrees(watcher_->latest().orientation);
+}
+
+bool ScrctlSession::logical_to_panel(
+    int x, int y, int logical_w, int logical_h, double& fx, double& fy, std::string& err) const
+{
+    if (!device_) {
+        err = "not connected";
+        return false;
+    }
+    if (logical_w <= 0 || logical_h <= 0) {
+        err = "screenshot size unknown; take a screenshot before sending touches";
+        return false;
+    }
+
+    // 触摸面的 0..1 是**面板轴**的，而调用方给的像素在"正立画面"那一套轴上，界面
+    // rot90/rot270 时两套轴要换向，所以不能各自除一下自己的尺寸了事。
+    //
+    // 这里没有用户给的裁剪框，所以 `Crop` 就是整块屏：偏移 0、尺寸等于面板尺寸，而
+    // 面板尺寸 = 正立尺寸在 90/270 时宽高对调。换成这样之后 `viewport_fraction_to_panel`
+    // 的算式与直接除正立尺寸完全等价，将来接上设备上报的裁剪框（那时偏移不再是 0，
+    // 顺序错了会整整偏出一条边）也不用再改这里。
+    const int degrees = orientation_degrees();
+    const bool swapped = degrees == 90 || degrees == 270;
+    scrctl::app::Crop crop;
+    crop.w = crop.display_w = swapped ? logical_h : logical_w;
+    crop.h = crop.display_h = swapped ? logical_w : logical_h;
+    scrctl::app::viewport_fraction_to_panel(x, y, crop, degrees, fx, fy);
+
+    fx = std::clamp(fx, 0.0, 1.0);
+    fy = std::clamp(fy, 0.0, 1.0);
+    return true;
 }
 
 bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
@@ -202,6 +288,7 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
         serial = pump_->newer(frame, floor_serial, kReviveWaitMs);
     }
     if (serial != 0 && convert(frame, image)) {
+        rotate_to_upright(image);
         return true;
     }
 
@@ -228,7 +315,9 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
     // 所以没有新帧"，而是这条流根本还没产出过任何东西，再等 3 秒也是零。省掉它能把降级
     // 头两轮的单次截图从 ~6.9 秒压到 ~3.9 秒（实测：无边记那块解不了的画板上头两次
     // 截图各 6849/6894ms，之后泵自己判死、走快路径，稳定在 540-990ms）。
-    if (!starving && pump_->serial() != 0 && pump_->latest(frame, kFrameWaitMs) && convert(frame, image)) {
+    if (!starving && pump_->serial() != 0 && pump_->latest(frame, kFrameWaitMs)
+        && convert(frame, image)) {
+        rotate_to_upright(image);
         return true;
     }
 

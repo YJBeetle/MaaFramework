@@ -22,6 +22,7 @@ class FramePump;
 namespace scrctl::remote
 {
 class Device;
+class DisplayWatcher;
 }
 
 namespace scrctl::hid
@@ -114,9 +115,26 @@ public:
     /// `am force-stop` 也是这个语义，调用方的意图（"它别在跑"）已经成立。
     bool stop_app(const std::string& bundle_id, std::string& err);
 
+    /// 把"正立画面里的原始像素"换成设备触摸面要的 0..1（那是**面板轴**的）。
+    ///
+    /// `logical_w/logical_h` 是调用方手上那张图的尺寸，也就是正立尺寸。界面转了
+    /// 90/270 之后正立轴和面板轴不再重合，所以这一步不能由调用方自己除一下尺寸了事
+    /// ——不管那张图是从码流转出来的还是截图服务给的，触摸面只认面板轴。
+    bool logical_to_panel(
+        int x, int y, int logical_w, int logical_h, double& fx, double& fy, std::string& err) const;
+
+    /// 当前界面要顺时针转多少度才是正立（0/90/180/270）。
+    /// 拿不到订阅时返回 0，也就是"不转"——转歪比不转更糟。
+    [[nodiscard]] int orientation_degrees() const;
+
 private:
-    /// 把一帧 BGRA 变成裁好、转好色的 BGR。
-    static bool convert(const scrctl::Frame& frame, cv::Mat& image);
+    /// 把一帧 BGRA 变成裁好、转好色的 BGR。**结果还在面板轴上**，界面转着时内容是
+    /// 躺着的，要再过一道 rotate_to_upright。
+    bool convert(const scrctl::Frame& frame, cv::Mat& image);
+
+    /// 把面板轴的帧转正。只有码流这条路需要它——截图服务给的 PNG 是设备已经合成好的
+    /// 正立图，再转一次就转歪了。
+    void rotate_to_upright(cv::Mat& image) const;
 
     /// 不经过视频流问一次截图服务（`capturescreenshot`）。它自己走 CoreDevice 的 RPC
     /// 通道，所以视频流死了、甚至这条流根本解不了的时候它照样能拿到当前画面——代价是
@@ -125,6 +143,9 @@ private:
 
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
+    /// 常驻的显示几何订阅，只为拿 currentOrientation。**声明必须在 device_ 之后**：
+    /// 它持有 Device&，成员按声明逆序析构，这样它先停、Device 后走。
+    std::unique_ptr<scrctl::remote::DisplayWatcher> watcher_;
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     std::string udid_;

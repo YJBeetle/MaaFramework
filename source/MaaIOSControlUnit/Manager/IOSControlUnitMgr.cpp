@@ -140,9 +140,8 @@ bool IOSControlUnitMgr::normalize(int x, int y, double& fx, double& fy, std::str
         LogWarn << "touch point outside the screenshot" << VAR(x) << VAR(y) << VAR(display_width_)
                 << VAR(display_height_);
     }
-    fx = std::clamp(static_cast<double>(x) / display_width_, 0.0, 1.0);
-    fy = std::clamp(static_cast<double>(y) / display_height_, 0.0, 1.0);
-    return true;
+    // 换向交给会话：它才知道设备报的界面朝向，而触摸面的 0..1 是面板轴的。
+    return session_.logical_to_panel(x, y, display_width_, display_height_, fx, fy, err);
 }
 
 bool IOSControlUnitMgr::screencap(cv::Mat& image)

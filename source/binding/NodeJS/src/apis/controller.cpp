@@ -617,6 +617,28 @@ maajs::ValueType load_macos_controller(maajs::EnvType env)
     return ctor;
 }
 
+IOSControllerImpl* IOSControllerImpl::ctor(const maajs::CallbackInfo& info)
+{
+    auto [udid, screencap_methods] = maajs::UnWrapArgs<IOSControllerCtorParam, void>(info);
+    auto ctrl = MaaIOSControllerCreate(udid.c_str(), screencap_methods.value_or(MaaIOScreencapMethod_Default));
+    if (!ctrl) {
+        return nullptr;
+    }
+    return new IOSControllerImpl(ctrl, true);
+}
+
+void IOSControllerImpl::init_proto(maajs::ObjectType, maajs::FunctionType)
+{
+}
+
+maajs::ValueType load_ios_controller(maajs::EnvType env)
+{
+    maajs::FunctionType ctor;
+    maajs::NativeClass<IOSControllerImpl>::init<ControllerImpl>(env, ctor, &ExtContext::get(env)->controllerCtor);
+    ExtContext::get(env)->iosControllerCtor = maajs::PersistentFunction(ctor);
+    return ctor;
+}
+
 PlayCoverControllerImpl* PlayCoverControllerImpl::ctor(const maajs::CallbackInfo& info)
 {
     auto [address, uuid] = maajs::UnWrapArgs<PlayCoverControllerCtorParam, void>(info);

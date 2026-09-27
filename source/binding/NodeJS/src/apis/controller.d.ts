@@ -267,6 +267,19 @@ declare global {
             static find(): Promise<DesktopDevice[] | null>
         }
 
+        /**
+         * Connect to a physical iPhone over Xcode's CoreDevice channel (macOS only).
+         *
+         * @param udid device UDID. Pass an empty string to use the only connected device;
+         *             if several are connected the constructor fails and lists the candidates.
+         * @param screencap_method bitwise OR of `IOSScreencapMethod` values. Defaults to
+         *                         `IOSScreencapMethod.Default` (stream first, fall back to the
+         *                         screenshot service when a frame cannot be decoded).
+         */
+        class IOSController extends Controller {
+            constructor(udid: string, screencap_method?: ScreencapOrInputMethods)
+        }
+
         class PlayCoverController extends Controller {
             constructor(address: string, uuid: string)
         }

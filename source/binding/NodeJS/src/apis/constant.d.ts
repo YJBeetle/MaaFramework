@@ -178,6 +178,27 @@ declare global {
         >
 
         /**
+         * iOS screencap method flags.
+         *
+         * Use bitwise OR to set the methods you need.
+         * MaaFramework will use the fastest allowed one and fall back when it cannot.
+         *
+         * Default: both methods
+         *
+         * | Method            | Speed     | Compatibility | Lossless | Notes                                              |
+         * |-------------------|-----------|---------------|----------|----------------------------------------------------|
+         * | Stream            | Very Fast | Medium        | Lossy    | Latest frame of the device media stream, ~13ms/shot |
+         * | ScreenshotService | Medium    | High          | Lossless | One RPC per shot, ~150-230ms                        |
+         */
+        const IOSScreencapMethod: Record<
+            | 'Stream'
+            | 'ScreenshotService'
+            | 'All'
+            | 'Default',
+            ScreencapOrInputMethods
+        >
+
+        /**
          * Linux screencap method.
          *
          * No bitwise OR, select ONE method only.

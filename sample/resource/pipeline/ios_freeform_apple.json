@@ -1,0 +1,54 @@
+{
+    "StartFreeform": {
+        "action": "StartApp",
+        "package": "com.apple.freeform",
+        "timeout": 30000,
+        "next": ["OnBoardList", "InBoard", "DrawingMode"]
+    },
+
+    "OnBoardList": {
+        "recognition": "TemplateMatch",
+        "template": ["ios/freeform_board_list.png"],
+        "threshold": 0.8,
+        "roi": [0, 1360, 400, 160],
+        "action": "Click",
+        "target": [622, 1458],
+        "post_wait_freezes": { "time": 300, "timeout": 4000, "target": [40, 240, 640, 1000] },
+        "next": ["InBoard", "OnBoardList"]
+    },
+
+    "InBoard": {
+        "recognition": "TemplateMatch",
+        "template": ["ios/freeform_pen_bar.png"],
+        "threshold": 0.8,
+        "roi": [120, 1360, 400, 160],
+        "action": "Click",
+        "target": [235, 1470],
+        "post_wait_freezes": { "time": 300, "timeout": 4000, "target": [40, 240, 640, 1000] },
+        "next": ["DrawingMode", "InBoard"]
+    },
+
+    "DrawingMode": {
+        "recognition": "TemplateMatch",
+        "template": ["ios/freeform_drawing_mode.png"],
+        "threshold": 0.8,
+        "roi": [540, 60, 180, 160],
+        "action": "Custom",
+        "custom_action": "DrawAppleLogo",
+        "next": ["CommitInk", "DrawingMode"]
+    },
+
+    "CommitInk": {
+        "recognition": "TemplateMatch",
+        "template": ["ios/freeform_drawing_mode.png"],
+        "threshold": 0.8,
+        "roi": [540, 60, 180, 160],
+        "action": "Click",
+        "target": [647, 137],
+        "next": ["Done"]
+    },
+
+    "Done": {
+        "action": "DoNothing"
+    }
+}

@@ -177,11 +177,26 @@ bool ScrctlSession::create(
         pump_ = scrctl::media::FramePump::start(*device_, pump_options, err);
         if (!pump_) {
             LogError << "start media stream failed" << VAR(err);
-            device_.reset();
-            return false;
+            // 起流失败**不一定**是"这台设备用不了"。iOS 18 那类设备上是**必然失败**：
+            // 设备按版本拒 startmediastream（code 9021，原话 "Remote control requires
+            // iOS 27.0 or later on this device"），而截图服务、硬件按键、触摸注入在那边
+            // 全都可用（实测 iPad11,2 / iPadOS 18.7.8）。以前这里直接 return false，
+            // 等于"没有实时流就整个连不上"，把一台能看也能操作的设备判死。
+            //
+            // scrctl 的窗口那侧是在 app 层降的级，而 MaaFW 不编 src/app，所以这道门
+            // 得自己下。调用方只给了 Stream 时仍然照实失败——那是它明确表过态的语义。
+            const bool allow_service =
+                (screencap_methods_ & MaaIOScreencapMethod_ScreenshotService) != 0;
+            if (!allow_service) {
+                device_.reset();
+                return false;
+            }
+            err.clear();
+            LogWarn << "no media stream, continuing with the screencapture service only"
+                    << VAR(screencap_methods_);
         }
 
-        if (!pump_->latest(first, kFrameWaitMs)) {
+        if (pump_ && !pump_->latest(first, kFrameWaitMs)) {
             // 拿不到第一帧**不算连接失败**。以前这里直接 return false，于是"画面复杂到
             // VideoToolbox 吃不下这一帧"（实测无边记画满白线的看板，IDR 256278 字节，超过
             // 2 字节长度前缀上限）会让整个控制单元连不上——而它其实每次截图都能拿到正确的图。

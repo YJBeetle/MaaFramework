@@ -87,6 +87,17 @@ target_link_libraries(MaaIOSControlUnit PRIVATE
 
 target_compile_definitions(MaaIOSControlUnit PRIVATE MAA_CONTROL_UNIT_EXPORTS)
 
+# OpenSSL 3 把 SHA512_Init/Update/Final 这类"一把梭"的摘要接口标成了
+# deprecated，而 scrctl 的 SRP（无线配对那一步的数学层，src/wifi/Srp.cpp）用的
+# 正是它们——接口在 3.x 里仍然稳定可用，只是官方推荐改走 EVP_MD_CTX。
+#
+# 为什么要在这里压掉而不是去改 scrctl：这个 target 带 -Werror，而 scrctl 自己的
+# 构建不带，同一个警告在那边是提示、在这边是**编不出来**。MaaFW 的门槛不该由隔壁
+# checkout 的告警策略决定，尤其这条还是"稳定但已废弃"而不是"错了"。
+# 只压 OpenSSL 的废弃标记，别的其他 deprecation 照样红，所以盖不住自己的问题。
+# 真要根治是让 scrctl 换 EVP 接口，换完之后这一行可以删。
+target_compile_definitions(MaaIOSControlUnit PRIVATE OPENSSL_SUPPRESS_DEPRECATED)
+
 add_dependencies(MaaIOSControlUnit MaaUtils)
 
 install(

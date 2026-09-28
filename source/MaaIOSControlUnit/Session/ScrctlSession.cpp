@@ -14,6 +14,7 @@
 #include "remote/App.h"
 #include "remote/Device.h"
 #include "remote/DisplayInfo.h"
+#include "wifi/PairRecord.h"
 #include "xpc/XpcValue.h"
 
 namespace maa::ios_unit
@@ -28,8 +29,8 @@ constexpr int kFrameWaitMs = 3000;
 constexpr uint64_t kDisplayId = 1;
 /// 第一段等帧预算。屏幕在动时一帧 16ms 就到，这个预算只在"流活着但画面静止到不发帧
 /// 了"的那段窗口里付：静止画面上设备一个视频包都不发（只剩每秒那个 SR 心跳）。这段
-/// 窗口现在可以很长——会话的租期是我们在请求里报的（scrctl 报 3600 秒），过去那个数
-/// 是 20 秒，所以静止窗口最长也就 20 秒减去起流到静止的那一段。
+/// 窗口可以很长——那条租期是我们在请求里自己报的 20 秒，而泵每秒回一次 RTCP RR 续着
+/// 它，所以正常路径根本走不到点，静止画面可以一直停着。
 /// 取 300ms 还有一个作用：wake() 催出去之后，泵最多 50ms 就会把"要不要救流"定下来，
 /// 而那条问设备的 RPC 要 100~300ms——等满 300ms 再读 reviving()，读到"还在救"结果
 /// 其实答案是"活着不用救"的概率就很小了。
@@ -41,6 +42,52 @@ constexpr int kFirstFrameWaitMs = 300;
 /// 1500 与 4000 两档），但停+起那两条 RPC 偶尔慢到近一秒，所以这一段给到 3 秒。
 constexpr int kReviveWaitMs = 3000;
 
+/// 从本机的配对记录目录里挑一条出来，用于局域网那条路。
+///
+/// 记录是 scrctl（或任何 RemotePairing 客户端）配对时落盘的，默认目录
+/// `$XDG_DATA_HOME/scrctl` 或 `~/.local/share/scrctl`。**MaaFW 不自己造记录**：
+/// pair-setup 在 iOS 27 上要设备侧同意、而且那道门挂在传输层（见 scrctl docs §25），
+/// 把"配对"塞进一个自动化框架的构造函数里不合适——那是一条需要人在手机上按一次的
+/// 交互路径，而控制单元拿到的应当是"已经配好"的状态。
+///
+/// `udid` 为空时只有在"目录里恰好一条"才敢自动挑：挑错了不是连不上，而是**连上另一台
+/// 设备并往它上面打字**，那是最坏的一种失败。多于一条就把候选报回去让人显式选。
+std::optional<scrctl::wifi::PairRecord> load_pair_record(const std::string& udid, std::string& err)
+{
+    const std::string dir = scrctl::wifi::default_record_dir();
+
+    std::string want = udid;
+    if (want.empty()) {
+        std::string list_err;
+        const auto udids = scrctl::wifi::list_record_udids(dir, list_err);
+        if (udids.empty()) {
+            err = "no pair record found in " + dir
+                  + "; pair the device once (e.g. with scrctl --pair) before using Wi-Fi";
+            return std::nullopt;
+        }
+        if (udids.size() > 1) {
+            err = "multiple pair records in " + dir + ", pass the udid to select one:";
+            for (const auto& one : udids) {
+                err += " " + scrctl::remote::mask(one);
+            }
+            return std::nullopt;
+        }
+        want = udids.front();
+    }
+
+    auto record = scrctl::wifi::load_record(scrctl::wifi::record_path(dir, want), err);
+    if (record == std::nullopt) {
+        return std::nullopt;
+    }
+    // 记录"读得出来"和"能用"是两件事：缺 host_identifier 或密钥长度不对，pair-verify
+    // 的签名就对不上设备，而那一步失败之后设备可能直接把这条配对判死。在这里挡住。
+    if (!record->complete()) {
+        err = "pair record for " + scrctl::remote::mask(want) + " is incomplete";
+        return std::nullopt;
+    }
+    return record;
+}
+
 } // namespace
 
 ScrctlSession::ScrctlSession() = default;
@@ -50,7 +97,9 @@ ScrctlSession::~ScrctlSession()
     close();
 }
 
-bool ScrctlSession::create(const std::string& udid, MaaIOScreencapMethod screencap_methods, std::string& err)
+bool ScrctlSession::create(
+    const std::string& udid, const std::string& wifi_address, MaaIOScreencapMethod screencap_methods,
+    std::string& err)
 {
     if (device_) {
         return true;
@@ -63,11 +112,32 @@ bool ScrctlSession::create(const std::string& udid, MaaIOScreencapMethod screenc
     }
     screencap_methods_ = screencap_methods;
 
-    auto device = scrctl::remote::Device::establish(udid, err);
-    if (!device) {
-        LogError << "CoreDevice session failed" << VAR(err);
-        return false;
+    std::optional<scrctl::remote::Device> device;
+
+    if (wifi_address.empty()) {
+        device = scrctl::remote::Device::establish(udid, err);
+        if (!device) {
+            LogError << "CoreDevice session failed" << VAR(err);
+            return false;
+        }
     }
+    else {
+        // 局域网那条只有"隧道怎么接上"不同：pair-verify -> createListener -> TLS-PSK ->
+        // CDTunnel，接上之后隧道内的用户态栈、RSD 目录、服务连接、起流全共用同一份代码。
+        // 但它**没有 lockdown 会话**，所以这条路上任何依赖 lockdownd 的调用都不可用
+        // （目前只有建立过程本身用到，产品路径一个都没有）。
+        auto record = load_pair_record(udid, err);
+        if (record == std::nullopt) {
+            LogError << "no usable pair record" << VAR(scrctl::remote::mask(udid)) << VAR(err);
+            return false;
+        }
+        device = scrctl::remote::Device::establish_wifi(wifi_address, *record, err);
+        if (!device) {
+            LogError << "CoreDevice Wi-Fi session failed" << VAR(wifi_address) << VAR(err);
+            return false;
+        }
+    }
+
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*device));
     udid_ = device_->udid();
 
@@ -100,8 +170,9 @@ bool ScrctlSession::create(const std::string& udid, MaaIOScreencapMethod screenc
         // 去问设备"还在吗"。
         //
         // 这个节拍现在远没那么碍事了：那条租期是我们在 startmediastream 请求里自己报的
-        // `timeout`（scrctl 现在报 3600 秒），过去它等于 20 秒，所以"开着不用的会话每 20
-        // 秒对设备做一次停+起"是真会发生的。
+        // `timeout`（20 秒），而泵每秒回一次 RTCP RR 把它按住，所以"开着不用的会话每 20
+        // 秒被拆一次"不再发生。到点只剩异常路径（进程被杀、崩溃）——那时 20 秒是个客气的
+        // 回收时间，让设备早点把那一格还给下一个客户端。
         pump_options.silence_restart_ms = 0;
         pump_ = scrctl::media::FramePump::start(*device_, pump_options, err);
         if (!pump_) {
@@ -276,8 +347,8 @@ bool ScrctlSession::screencap(cv::Mat& image, std::string& err)
     // 这一句的话，"静置到流停 -> swipe -> 截图"实测会一直交出停流前那张旧图。租期已过
     // 时它走的是泵里那条"不问、直接重起"的快路。
     //
-    // 注：这条租期是我们在 startmediastream 请求里自己报的数（scrctl 现在报 3600 秒），
-    // 不再是过去那个 20 秒，所以"静置一会儿再截图"这种用法现在默认落在还活着的会话里。
+    // 注：那条租期是我们在 startmediastream 请求里自己报的 20 秒，而泵每秒回一次 RTCP RR
+    // 续着它，所以"静置一会儿再截图"这种用法默认落在还活着的会话里。
     // wake() 依然要留着：它管的是"任何原因的停流"，而不只是租期到点。
     pump_->wake();
 

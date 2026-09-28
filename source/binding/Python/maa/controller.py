@@ -982,12 +982,14 @@ class IOSController(Controller):
     def __init__(
         self,
         udid: str = "",
+        wifi_address: str = "",
         screencap_methods: int = MaaIOScreencapMethodEnum.Stream | MaaIOScreencapMethodEnum.ScreenshotService,
     ):
         """创建 iOS 控制器 / Create iOS controller
 
         Args:
             udid: 设备 UDID，传空串表示使用第一台在连的设备 / device UDID, empty for the first connected device
+            wifi_address: 设备的局域网地址，传空串走 USB / device LAN address; empty (default) uses USB. 走无线时 udid 只用来挑本机哪条配对记录 / over Wi-Fi the udid only selects the pair record
             screencap_methods: 允许的截图方式位掩码 / allowed screencap method bitmask
 
         Raises:
@@ -998,6 +1000,7 @@ class IOSController(Controller):
 
         self._handle = Library.framework().MaaIOSControllerCreate(
             udid.encode(),
+            wifi_address.encode(),
             MaaIOScreencapMethod(screencap_methods),
         )
 
@@ -1007,6 +1010,7 @@ class IOSController(Controller):
     def _set_ios_api_properties(self):
         Library.framework().MaaIOSControllerCreate.restype = MaaControllerHandle
         Library.framework().MaaIOSControllerCreate.argtypes = [
+            ctypes.c_char_p,
             ctypes.c_char_p,
             MaaIOScreencapMethod,
         ]

@@ -334,6 +334,7 @@ std::optional<RuntimeParam> Configurator::generate_runtime() const
         RuntimeParam::IOSParam ios;
 
         ios.udid = config_.ios.udid;
+        ios.wifi = config_.ios.wifi;
 
         if (!controller.ios.screencap.empty()) {
             ios.screencap = parse_ios_screencap_method(controller.ios.screencap);

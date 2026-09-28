@@ -51,13 +51,17 @@ public:
     ScrctlSession(const ScrctlSession&) = delete;
     ScrctlSession& operator=(const ScrctlSession&) = delete;
 
-    /// 建立会话。udid 为空表示"恰好一台就用它"，多台时报错并列出候选。
+    /// 建立会话。`udid` 为空表示"恰好一台就用它"，多台时报错并列出候选。
+    ///
+    /// `wifi_address` 非空就改走局域网：拿本机配对记录与该地址建 RemotePairing 隧道。
+    /// 空则是默认的 USB。两者**只有"隧道怎么接上"不同**，接上之后取图、注入、几何
+    /// 走的是同一份代码，所以下面关于 screencap_methods 的一切都照旧成立。
     ///
     /// `screencap_methods` 决定取图用哪几条路（见 MaaIOScreencapMethod）。下面的数都是
     /// 2026-09-27 在 iPhone14,4 / iOS 27 / USB、设备上只有我们这个客户端时量的。
     /// - 带 Stream：起一条媒体流当快路径，中位 14~17ms/张（列表、空板、涂满的板都是这一档，
     ///   静置 90 秒后首张 14ms）。代价是后台常驻解码和有损图。会话不会自己断——那条租期是
-    ///   我们自己报的（scrctl 现在报 3600 秒），而且泵每秒发一次 RTCP RR 续着它。
+    ///   我们自己报的（20 秒），而且泵每秒发一次 RTCP RR 续着它，所以正常路径走不到点。
     /// - 只带 ScreenshotService：**根本不建媒体会话、不起泵**，每次截图一条
     ///   capturescreenshot RPC。换来零后台解码和无损图，代价是慢 10~40 倍。
     ///   ⚠ 这个"慢"没有单一倍数，别拿一个中位数当常数：量的三块画面分别是
@@ -76,7 +80,9 @@ public:
     /// scrctl/tools/hid_gate_probe 复测推翻了：会话停掉之后、我们主动拆掉会话之后、
     /// 甚至全新进程一次流都没起过，注入实测都照样落地。所以下面几个
     /// 输入方法都不催流（见 scrctl/docs/coredevice.md §11）。
-    bool create(const std::string& udid, MaaIOScreencapMethod screencap_methods, std::string& err);
+    bool create(
+        const std::string& udid, const std::string& wifi_address,
+        MaaIOScreencapMethod screencap_methods, std::string& err);
 
     void close();
 

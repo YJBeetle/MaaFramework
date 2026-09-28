@@ -57,17 +57,39 @@ extern "C"
      *
      * @param udid The device UDID, or NULL to use the only connected device. When several
      *             devices are attached, passing NULL fails rather than guessing.
+     * @param wifi_address The device's LAN address (IPv4/IPv6) to reach it over Wi-Fi
+     *                     instead of USB, or NULL (the default) for USB. Over Wi-Fi the
+     *                     `udid` only selects which pair record to use and may be left
+     *                     empty when this machine holds exactly one.
      * @param screencap_methods Bitmask of allowed screencap methods, see MaaIOScreencapMethod.
      *                          With more than one set, the fastest working one is used.
      * @return The controller handle, or nullptr on failure.
      *
-     * @note Runs entirely in userspace over USB: no root, no jailbreak, no WebDriverAgent,
-     *       and unlike iPhone Mirroring the device stays usable while controlled.
+     * @note Runs entirely in userspace: no root, no jailbreak, no WebDriverAgent, and
+     *       unlike iPhone Mirroring the device stays usable while controlled.
      * @note Requires the device to be paired (trusted) and to have a Developer Disk Image
      *       mounted; Xcode mounts it automatically for registered devices.
+     * @note Wi-Fi needs a RemotePairing record on this machine (`$XDG_DATA_HOME/scrctl`,
+     *       else `~/.local/share/scrctl`). Pairing itself asks the user to tap "Allow" on
+     *       the device, so it is not part of connect -- do it once out of band. It also
+     *       has no lockdown session, which affects nothing on this code path.
+     * @note The media stream requires iOS 27 or later. On iOS 18 the device refuses
+     *       startmediastream with code 9021 and its own words "Remote control requires
+     *       iOS 27.0 or later on this device" (corroborated by Apple's on-device sharing
+     *       dialog), and getmediasupportinfo reports supportedFeatures 0 vs 972. Screencap
+     *       via ScreenshotService, hardware buttons and touch injection all work there --
+     *       so pass MaaIOScreencapMethod_ScreenshotService on such a device: it is the
+     *       only thing that can produce an image, and ~2 fps of it.
+     * @note A sleeping screen makes the screenshot service answer with an all-black PNG.
+     *       A recognition miss on an idle device may mean "asleep", not "template wrong";
+     *       wake it with MaaControllerClickKey(MaaKeycode_MaaKey_Home) before concluding.
      * @note Screencap returns the logical display at native scale; touch coordinates are
      *       in that same pixel space (before the framework's screenshot scaling, see
      *       MaaControllerPostClick).
+     * @note On iOS 18 the `deviceinfo` service is not in the RSD catalog, so the unit
+     *       cannot learn the interface orientation there and never rotates anything.
+     *       That is correct rather than degraded: measured there the screenshot service
+     *       already hands back an upright image and orientation always reads rot0.
      * @note Setting MaaIOScreencapMethod_ScreenshotService alone never opens a media stream,
      *       so nothing is decoded in the background. It costs 10x to 40x more per frame:
      *       14-17ms median over the stream vs 113-891ms per RPC (iPhone 14,4 / iOS 27, USB,
@@ -84,8 +106,8 @@ extern "C"
      *       relative_move, key_down/key_up. `click_key` maps to hardware buttons only
      *       (home/lock/volume).
      */
-    MAA_FRAMEWORK_API MaaController*
-        MaaIOSControllerCreate(const char* udid, MaaIOScreencapMethod screencap_methods);
+    MAA_FRAMEWORK_API MaaController* MaaIOSControllerCreate(
+        const char* udid, const char* wifi_address, MaaIOScreencapMethod screencap_methods);
 
     /**
      * @brief Create an Android native controller backed by MaaAndroidNativeControlUnit.

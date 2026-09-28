@@ -138,7 +138,8 @@ struct MacOSControllerImpl : public ControllerImpl
     static void init_proto(maajs::ObjectType proto, maajs::FunctionType ctor);
 };
 
-using IOSControllerCtorParam = std::tuple<std::string, maajs::OptionalParam<MaaIOScreencapMethod>>;
+using IOSControllerCtorParam =
+    std::tuple<std::string, std::string, maajs::OptionalParam<MaaIOScreencapMethod>>;
 
 struct IOSControllerImpl : public ControllerImpl
 {

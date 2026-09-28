@@ -272,12 +272,18 @@ declare global {
          *
          * @param udid device UDID. Pass an empty string to use the only connected device;
          *             if several are connected the constructor fails and lists the candidates.
+         * @param wifi_address device LAN address (IPv4/IPv6) to go over Wi-Fi instead of
+         *                     USB. Pass an empty string for USB, the default. Over Wi-Fi the
+         *                     udid only selects which pair record on this machine to use and
+         *                     may be empty when exactly one record exists. Pairing is not done
+         *                     here -- it needs a tap on the device, so create the record out
+         *                     of band first.
          * @param screencap_method bitwise OR of `IOSScreencapMethod` values. Defaults to
          *                         `IOSScreencapMethod.Default` (stream first, fall back to the
          *                         screenshot service when a frame cannot be decoded).
          */
         class IOSController extends Controller {
-            constructor(udid: string, screencap_method?: ScreencapOrInputMethods)
+            constructor(udid: string, wifi_address?: string, screencap_method?: ScreencapOrInputMethods)
         }
 
         class PlayCoverController extends Controller {

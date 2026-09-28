@@ -619,8 +619,10 @@ maajs::ValueType load_macos_controller(maajs::EnvType env)
 
 IOSControllerImpl* IOSControllerImpl::ctor(const maajs::CallbackInfo& info)
 {
-    auto [udid, screencap_methods] = maajs::UnWrapArgs<IOSControllerCtorParam, void>(info);
-    auto ctrl = MaaIOSControllerCreate(udid.c_str(), screencap_methods.value_or(MaaIOScreencapMethod_Default));
+    auto [udid, wifi_address, screencap_methods] =
+        maajs::UnWrapArgs<IOSControllerCtorParam, void>(info);
+    auto ctrl = MaaIOSControllerCreate(
+        udid.c_str(), wifi_address.c_str(), screencap_methods.value_or(MaaIOScreencapMethod_Default));
     if (!ctrl) {
         return nullptr;
     }

@@ -872,6 +872,26 @@ void Interactor::select_ios(const MAA_PROJECT_INTERFACE_NS::InterfaceData::Contr
     }
     std::cout << "\n";
 
+    if (ios.wifi.empty()) {
+        ios.wifi = ios_config.wifi;
+    }
+
+    std::cout << "Device LAN address for Wi-Fi control. Leave it empty to stay on USB.\n"
+                 "Wi-Fi needs a RemotePairing record on this machine (~/.local/share/scrctl);\n"
+                 "over Wi-Fi the UDID above only picks which record to use.\n";
+    std::cout << "Wi-Fi address [" << (ios.wifi.empty() ? "USB" : ios.wifi) << "]: ";
+    std::cin.sync();
+    std::getline(std::cin, buffer);
+
+    if (std::cin.eof()) {
+        s_eof = true;
+        return;
+    }
+    if (!buffer.empty()) {
+        ios.wifi = buffer;
+    }
+    std::cout << "\n";
+
     std::cout << "### Select screencap method ###\n\n";
     std::cout << "\t1. Stream: media stream, ~15ms per shot, but lossy and needs a decoder running\n";
     std::cout << "\t2. ScreenshotService: one RPC per shot, ~170ms on a simple screen and several\n";

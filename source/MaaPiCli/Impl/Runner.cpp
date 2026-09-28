@@ -152,7 +152,7 @@ bool Runner::run(const RuntimeParam& param)
     }
     else if (const auto* p_ios_param = std::get_if<RuntimeParam::IOSParam>(&param.controller_param)) {
 #if defined(__APPLE__)
-        controller_handle = MaaIOSControllerCreate(p_ios_param->udid.c_str(), p_ios_param->screencap);
+        controller_handle = MaaIOSControllerCreate(p_ios_param->udid.c_str(), p_ios_param->wifi.c_str(), p_ios_param->screencap);
 #else
         std::ignore = p_ios_param;
         LogError << "iOS controller is only supported on macOS";

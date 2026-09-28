@@ -20,7 +20,7 @@ MaaController* MaaMacOSControllerCreate(uint32_t, MaaMacOSScreencapMethod, MaaMa
     return nullptr;
 }
 
-MaaController* MaaIOSControllerCreate(const char*, MaaIOScreencapMethod)
+MaaController* MaaIOSControllerCreate(const char*, const char*, MaaIOScreencapMethod)
 {
     LogError << "MaaAgentServer Not implement this API, Please use MaaFramework";
     return nullptr;

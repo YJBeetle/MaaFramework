@@ -8,6 +8,18 @@ root = Path(sys.argv[1])
 sys.path.insert(0, str(root / '3rdparty/XDeviceBridge/tests/support'))
 from fake_server import FakeServer
 
+
+class InterruptedVideoServer(FakeServer):
+    frame_unavailable = False
+
+    def handle_call(self, name, params):
+        if name == 'video.frame' and self.frame_unavailable:
+            with self.lock:
+                self.calls.append((name, params))
+            raise ValueError('No newer frame within the requested timeout')
+        return super().handle_call(name, params)
+
+
 fw = C.CDLL(sys.argv[2])
 tk = C.CDLL(sys.argv[3])
 P = C.c_void_p
@@ -85,4 +97,28 @@ with FakeServer() as server:
             destroy(ctrl)
     assert not {'pair', 'pairing.import', 'ddi.prepare'} & set(server.methods())
     assert 'connection.close' in server.methods()
+
+with InterruptedVideoServer() as server:
+    config = json.dumps(server.config).encode()
+    for method in (1, 3):
+        before = len(server.calls)
+        ctrl = create(b'mock-iphone', method, 2, b'auto', config)
+        assert ctrl
+        try:
+            assert wait(ctrl, posts['Connection'](ctrl)) == 3000
+            assert wait(ctrl, posts['Screencap'](ctrl)) == 3000
+            server.frame_unavailable = True
+            expected = 4000 if method == 1 else 3000
+            assert wait(ctrl, posts['Screencap'](ctrl)) == expected
+            server.frame_unavailable = False
+            assert wait(ctrl, posts['Screencap'](ctrl)) == 3000
+            calls = server.calls[before:]
+            starts = [params for name, params in calls if name == 'video.start']
+            assert len(starts) == 1 and starts[0].get('restart_on_silence', True)
+            assert not any(name == 'video.stop' for name, _ in calls)
+            assert sum(name == 'connection.open' for name, _ in calls) == 1
+            assert sum(name == 'screenshot' for name, _ in calls) == (method == 3)
+        finally:
+            server.frame_unavailable = False
+            destroy(ctrl)
 print('PASS: native xdb discovery, Stream/PNG/fallback, geometry, input, app control and ownership')

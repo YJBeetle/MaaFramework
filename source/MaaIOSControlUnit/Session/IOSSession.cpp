@@ -67,7 +67,8 @@ bool IOSSession::create(
     }
     client_.call("display.info", json::object { }, err);
     if (methods & MaaIOSScreencapMethod_Stream) {
-        video_ = client_.call("video.start", json::object { { "restart_on_silence", false } }, err);
+        // Let the server own stream recovery, including complete receive silence.
+        video_ = client_.call("video.start", json::object { }, err);
         if (!video_ && !(methods & MaaIOSScreencapMethod_ScreenshotService)) {
             close();
             return false;

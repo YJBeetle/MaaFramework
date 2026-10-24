@@ -1,5 +1,4 @@
 #include "IOSSession.h"
-#include <MaaUtils/Logger.h>
 #include <algorithm>
 #include <chrono>
 #include <limits>
@@ -12,6 +11,8 @@ namespace maa::ios_unit
 {
 namespace
 {
+constexpr std::chrono::milliseconds kKeyHoldDuration { 90 };
+
 void rotate_image(cv::Mat& image, int degrees)
 {
     switch (degrees) {
@@ -317,7 +318,7 @@ bool IOSSession::click_key(int key, std::string& err)
     if (!key_down(key, err)) {
         return false;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(90));
+    std::this_thread::sleep_for(kKeyHoldDuration);
     return key_up(key, err);
 }
 

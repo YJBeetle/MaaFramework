@@ -283,7 +283,6 @@ json::object IOSControlUnitMgr::get_info() const
     info["udid"] = session_.udid();
     info["product_type"] = session_.device_property("ProductType");
     info["os_version"] = session_.device_property("OSVersion");
-    info["market_name"] = session_.device_property("MarketName");
     info["display_width"] = display_width_;
     info["display_height"] = display_height_;
     return info;

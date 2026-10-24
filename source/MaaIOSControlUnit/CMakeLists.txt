@@ -2,6 +2,8 @@ set(XDB_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(XDB_BUILD_CLI OFF CACHE BOOL "" FORCE)
 set(XDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(XDB_INSTALL OFF CACHE BOOL "" FORCE)
+# Allow xdb to download its pinned nlohmann_json version when no suitable package is found.
+set(XDB_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/XDeviceBridge ${CMAKE_BINARY_DIR}/3rdparty/XDeviceBridge)
 
 file(GLOB_RECURSE maa_ios_control_unit_src *.h *.hpp *.cpp)
